@@ -1,10 +1,24 @@
-<script setup></script>
-
 <template>
-  <h1>Hii Team 14</h1>
-  <p>
-   Let's start working on the frontend part of our application
-  </p>
+  <main class="flex-grow-1">
+    <RouterView /> 
+  </main>
+
+  <Footer />
 </template>
 
-<style scoped></style>
+<script setup>
+import { RouterView } from 'vue-router';
+import Footer from './components/Footer.vue';
+</script>
+
+<style>
+/* Basic CSS to ensure the footer sticks to the bottom on short pages */
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+main {
+  flex-grow: 1; 
+}
+</style>
