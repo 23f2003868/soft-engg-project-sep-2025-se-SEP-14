@@ -1,11 +1,12 @@
 # ---------------------------------Imports-------------------------------------------
 from functools import wraps
+from operator import and_
 import os
 import datetime
 import jwt
 
 from flask import (
-    Blueprint, jsonify, flash, request, redirect,
+    Blueprint, json, jsonify, flash, request, redirect,
     url_for, render_template, send_from_directory
 )
 from flask_login import (
@@ -20,13 +21,18 @@ from app.forms import (
     RegisterAdminForm, RegisterCandidateForm,
     RegisterRecruiterForm, CreateJobForm
 )
-from app.models import Job, Recruiter, Candidate, User
+from app.models import CandidateJobRequest, Job, Recruiter, Candidate, User,Conversation
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
 load_dotenv()
-google_api_key = os.getenv("GOOGLE_API_KEY")
 
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.tools import tool 
+from langchain_core.messages import HumanMessage,AIMessage
+
+
+import pickle
 
 CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
@@ -35,11 +41,6 @@ SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 
 
 
-gemini_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    temperature=0.7,
-    google_api_key=google_api_key  # Add this
-)
 
 
 main = Blueprint("main", __name__)
@@ -291,6 +292,7 @@ def update_recruiter(current_user):
         # Update customer details (excluding password)
         user.firstname = data.get('firstname', user.firstname)
         user.lastname = data.get('lastname', user.lastname)
+        user.email = data.get('email', user.email)
         recruiter = Recruiter.query.filter_by(user_id=user.user_id).first()
         if not recruiter:
             return jsonify({"error": "Recruiter not found"}), 404
@@ -309,23 +311,31 @@ def update_recruiter(current_user):
 @token_required
 def get_jobs(current_user):
     try:
-        jobs_data = Job.query.filter_by(status='ACTV').all()
+        if current_user.role=="RECRUITER":
+            jobs_data = Job.query.filter(
+                Job.status == 'ACTV',
+                Job.created_by == current_user.user_id
+            ).all()
 
-        jobs = []
-        for job in jobs_data:
-            jobs.append({
-                "job_id": job.job_id,
-                "job_title": job.job_title,
-                "location": job.location,
-                "job_type": job.job_type,
-                "description": job.description,
-                "status": job.status
-            })
+            jobs = []
+            for job in jobs_data:
+                jobs.append({
+                    "job_id": job.job_id,
+                    "job_title": job.job_title,
+                    "location": job.location,
+                    "job_type": job.job_type,
+                    "description": job.description,
+                    "status": job.status
+                })
 
-        return jsonify({
-            "count": len(jobs),
-            "jobs": jobs
-        }), 200
+            return jsonify({
+                "count": len(jobs),
+                "jobs": jobs
+            }), 200
+        else:
+            return jsonify({
+                'message': 'Invalid Recruiter!',
+            }), 400
 
     except Exception as e:
         return jsonify({"error": f"Failed to fetch jobs: {str(e)}"}), 500
@@ -406,7 +416,7 @@ def update_candidate(current_user):
         # Update user fields
         user.firstname = data.get('firstname', user.firstname)
         user.lastname = data.get('lastname', user.lastname)
-        user.email = data.get('lastname', user.email)
+        user.email = data.get('email', user.email)
 
         candidate = Candidate.query.filter_by(user_id=user.user_id).first()
         if not candidate:
@@ -434,64 +444,76 @@ def allowed_file(filename):
 @token_required
 def create_job_api(current_user):
     try:
-        data = request.get_json()
+        google_api_key = os.getenv("GOOGLE_API_KEY")
 
-        # Input validation
-        errors = {}
-        if not data.get('job_title'):
-            errors['job_title'] = 'Job title is required.'
-        if not data.get('location'):
-            errors['location'] = 'Job Location is required.'
-        if not data.get('job_type'):
-            errors['job_type'] = 'Job Type is required.'
-        if not data.get('description_keywords'):
-            errors['description_keywords'] = 'Description keywords are required.'
-
-        if errors:
-            return jsonify({'errors': errors}), 400
-
-        # Check if job already exists
-        if Job.query.filter_by(job_title=data['job_title']).first():
-            return jsonify({'errors': {'job_title': 'A job with this title already exists.'}}), 400
-
-        job_title = data['job_title']
-        job_type = data['job_type']
-        keywords = data['description_keywords']
-
-        # -------------------------------
-        # GEMINI + LANGCHAIN
-        # -------------------------------
-        prompt = f"""
-        Write a professional job description of around 100 words.
-        Details:
-        - Job Title: {job_title}
-        - Job Type: {job_type}
-        - Important Keywords: {keywords}
-
-        Create a clear, attractive, and structured job description suitable for a hiring portal. just give job description which i directly use to store as my description.
-        """
-
-        ai_response = gemini_llm.invoke(prompt)
-        generated_description = ai_response.content.strip()
-
-        # -------------------------------
-        # Save Job
-        # -------------------------------
-        job = Job(
-            job_title=job_title,
-            location=data['location'],
-            job_type=job_type,
-            description=generated_description
+        gemini_llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            temperature=0.7,
+            google_api_key=google_api_key  # Add this
         )
 
-        db.session.add(job)
-        db.session.commit()
+        data = request.get_json()
+        if current_user.role=="RECRUITER":
+            # Input validation
+            errors = {}
+            if not data.get('job_title'):
+                errors['job_title'] = 'Job title is required.'
+            if not data.get('location'):
+                errors['location'] = 'Job Location is required.'
+            if not data.get('job_type'):
+                errors['job_type'] = 'Job Type is required.'
+            if not data.get('description_keywords'):
+                errors['description_keywords'] = 'Description keywords are required.'
 
-        return jsonify({
-            'message': 'Job created successfully!',
-            'generated_description': generated_description
-        }), 201
+            if errors:
+                return jsonify({'errors': errors}), 400
 
+            # Check if job already exists
+            if Job.query.filter(and_(Job.job_title == data['job_title'], Job.created_by == current_user.user_id)).first():
+                return jsonify({'errors': {'job_title': 'A job with this title already exists.'}}), 400
+
+            job_title = data['job_title']
+            job_type = data['job_type']
+            keywords = data['description_keywords']
+
+            # -------------------------------
+            # GEMINI + LANGCHAIN
+            # -------------------------------
+            prompt = f"""
+            Write a professional job description of around 100 words.
+            Details:
+            - Job Title: {job_title}
+            - Job Type: {job_type}
+            - Important Keywords: {keywords}
+
+            Create a clear, attractive, and structured job description suitable for a hiring portal. just give job description which i directly use to store as my description.
+            """
+
+            ai_response = gemini_llm.invoke(prompt)
+            generated_description = ai_response.content.strip()
+
+            # -------------------------------
+            # Save Job
+            # -------------------------------
+            job = Job(
+                created_by=current_user.user_id,
+                job_title=job_title,
+                location=data['location'],
+                job_type=job_type,
+                description=generated_description
+            )
+
+            db.session.add(job)
+            db.session.commit()
+
+            return jsonify({
+                'message': 'Job created successfully!',
+                'generated_description': generated_description
+            }), 201
+        else:
+            return jsonify({
+                'message': 'Invalid Requiter!',
+            }), 400
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
@@ -501,47 +523,266 @@ def create_job_api(current_user):
 @token_required
 def update_job_api(current_user, job_id):
     try:
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+
+        gemini_llm = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            temperature=0.7,
+            google_api_key=google_api_key  # Add this
+        )
         data = request.get_json()
+        if current_user.role=="RECRUITER":
+            # Fetch job by ID
+            job = Job.query.get(job_id)
+            if not job:
+                return jsonify({'error': 'Job not found'}), 404
 
-        # Fetch job by ID
-        job = Job.query.get(job_id)
-        if not job:
-            return jsonify({'error': 'Job not found'}), 404
+            # Input validation
+            errors = {}
+            if not data.get('job_title'):
+                errors['job_title'] = 'Job title is required.'
+            if not data.get('location'):
+                errors['location'] = 'Job location is required.'
+            if not data.get('job_type'):
+                errors['job_type'] = 'Job type is required.'
+            if not data.get('description_keywords'):
+                errors['description_keywords'] = 'Description is required.'
 
-        # Input validation
-        errors = {}
-        if not data.get('job_title'):
-            errors['job_title'] = 'Job title is required.'
-        if not data.get('location'):
-            errors['location'] = 'Job location is required.'
-        if not data.get('job_type'):
-            errors['job_type'] = 'Job type is required.'
-        if not data.get('description'):
-            errors['description'] = 'Description is required.'
+            if errors:
+                return jsonify({'errors': errors}), 400
 
-        if errors:
-            return jsonify({'errors': errors}), 400
+            # Check for duplicate job title (excluding this job)
+            existing_job = Job.query.filter(
+                Job.job_title == data['job_title'],
+                Job.job_id != job_id,
+                Job.created_by==current_user.user_id
+            ).first()
 
-        # Check for duplicate job title (excluding this job)
-        existing_job = Job.query.filter(
-            Job.job_title == data['job_title'],
-            Job.job_id != job_id
-        ).first()
+            if existing_job:
+                return jsonify({'errors': {'job_title': 'A job with this title already exists.'}}), 400
 
-        if existing_job:
-            return jsonify({'errors': {'job_title': 'A job with this title already exists.'}}), 400
 
-        # Update job details
-        job.job_title = data['job_title']
-        job.location = data['location']
-        job.job_type = data['job_type']
-        job.description = data['description']
+            job_title = data['job_title']
+            job_type = data['job_type']
+            keywords = data['description_keywords']
 
-        db.session.commit()
+            # -------------------------------
+            # GEMINI + LANGCHAIN
+            # -------------------------------
+            prompt = f"""
+            Write a professional job description of around 100 words.
+            Details:
+            - Job Title: {job_title}
+            - Job Type: {job_type}
+            - Important Keywords: {keywords}
 
-        return jsonify({'message': 'Job updated successfully!'}), 200
+            Create a clear, attractive, and structured job description suitable for a hiring portal. just give job description which i directly use to store as my description.
+            """
 
+            ai_response = gemini_llm.invoke(prompt)
+            generated_description = ai_response.content.strip()
+            # Update job details
+            job.created_by = current_user.user_id
+            job.job_title = data['job_title']
+            job.location = data['location']
+            job.job_type = data['job_type']
+            job.description = generated_description
+
+            db.session.commit()
+
+            return jsonify({'message': 'Job updated successfully!'}), 200
+        else:
+            return jsonify({
+                'message': 'Invalid Requiter!',
+            }), 400
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+
+@main.route('/api/candidate-job-request', methods=['POST'])
+@token_required
+def create_candidate_job_request(current_user):
+    data = request.get_json()
+
+    # Validate required fields
+    required_fields = [ 'job_id', 'status']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"error": f"{field} is required"}), 400
+
+    # Validate status
+    valid_statuses = ['APPLIED', 'SHORTLISTED', 'INTERVIEWED', 'OFFERED', 'HIRED', 'UNDER_TEST']
+    if data['status'] not in valid_statuses:
+        return jsonify({"error": "Invalid status"}), 400
+    
+    # Create new record
+    new_request = CandidateJobRequest(
+        candidate_id=current_user.user_id,
+        job_id=data['job_id'],
+        status=data['status'],
+    )
+
+    db.session.add(new_request)
+    db.session.commit()
+
+    return jsonify({"message": "Candidate job request created successfully", "id": new_request.candidate_job_request_id}), 201
+
+
+
+@main.route('/api/candidate-job-requests', methods=['GET'])
+@token_required
+def get_candidate_job_requests(current_user):
+    recruiter_id = current_user.user_id
+
+    # Query with joins
+    results = db.session.query(
+        CandidateJobRequest.candidate_job_request_id,
+        CandidateJobRequest.candidate_id,
+        User.firstname,
+        User.lastname,
+        CandidateJobRequest.job_id,
+        Job.job_title,
+        CandidateJobRequest.test_score,
+        CandidateJobRequest.interview_scheduled_datetime,
+        CandidateJobRequest.status,
+        CandidateJobRequest.status_change_date
+    ).join(Job, CandidateJobRequest.job_id == Job.job_id) \
+     .join(Candidate, CandidateJobRequest.candidate_id == Candidate.user_id) \
+     .join(User, Candidate.user_id == User.user_id) \
+     .filter(Job.created_by == recruiter_id).all()
+
+    # Format response
+    data = []
+    for r in results:
+        data.append({
+            "candidate_job_request_id": r.candidate_job_request_id,
+            "candidate_id": r.candidate_id,
+            "candidate_name": f"{r.firstname} {r.lastname}",
+            "job_id": r.job_id,
+            "job_title": r.job_title,
+            "test_score": r.test_score,
+            "interview_scheduled_datetime": r.interview_scheduled_datetime.strftime('%Y-%m-%d %H:%M:%S') if r.interview_scheduled_datetime else None,
+            "status": r.status,
+            "status_change_date": r.status_change_date.strftime('%Y-%m-%d %H:%M:%S') if r.status_change_date else None
+        })
+
+    return jsonify(data), 200
+
+
+@main.route('/api/candidate-job-request/<int:request_id>', methods=['PUT'])
+@token_required
+def update_candidate_job_request(current_user, request_id):
+    data = request.get_json()
+
+    # Fetch existing record
+    candidate_request = CandidateJobRequest.query.get(request_id)
+    if not candidate_request:
+        return jsonify({"error": "Candidate job request not found"}), 404
+
+    # Validate status if provided
+    valid_statuses = ['APPLIED', 'SHORTLISTED', 'INTERVIEWED', 'OFFERED', 'HIRED', 'UNDER_TEST']
+    if 'status' in data and data['status'] not in valid_statuses:
+        return jsonify({"error": "Invalid status"}), 400
+
+    # Update fields if present
+    if 'job_id' in data:
+        candidate_request.job_id = data['job_id']
+    if 'test_score' in data:
+        candidate_request.test_score = data['test_score']
+    if 'interview_scheduled_datetime' in data and data['interview_scheduled_datetime']:
+        try:
+            candidate_request.interview_scheduled_datetime = datetime.datetime.strptime(
+                data['interview_scheduled_datetime'], "%Y-%m-%d %H:%M:%S"
+            )
+        except ValueError:
+            return jsonify({"error": "Invalid datetime format. Use YYYY-MM-DD HH:MM:SS"}), 400
+    if 'status' in data:
+        candidate_request.status = data['status']
+
+    # Always update status_change_date
+    candidate_request.status_change_date = datetime.datetime.utcnow()
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Candidate job request updated successfully",
+        "id": candidate_request.candidate_job_request_id
+    }), 200
+
+
+def get_conversations(user_id: int, job_id: int):
+    """Retrieve the conversation list for a given user and job."""
+    convo = Conversation.query.filter_by(user_id=user_id, job_id=job_id).first()
+    if convo is None or convo.data is None:
+        return []
+    
+    # Deserialize the conversation
+    return pickle.loads(convo.data)
+
+
+def insert_conversation(job_id: int, user_id: int, messages_list):
+    """Insert or update the conversation list for a given user and job."""
+    # Serialize the conversation
+    serialized = pickle.dumps(messages_list)
+    
+    # Try to fetch existing conversation
+    convo = Conversation.query.filter_by(user_id=user_id, job_id=job_id).first()
+    
+    if convo:
+        # Update existing
+        convo.data = serialized
+    else:
+        # Insert new
+        convo = Conversation(job_id=job_id, user_id=user_id, data=serialized)
+        db.session.add(convo)
+    
+    db.session.commit()
+
+
+#get response from chatbot
+#use /api/chatbot/response
+def chatbot_response(job_id,user_id,query):
+    llm = ChatGoogleGenerativeAI(
+        model='gemini-2.5-flash'
+    )
+    # llm_with_tools = llm.bind_tools()
+    messages = get_conversations(user_id,job_id)
+    query = "Help the user in queries related to the job post id" + str(job_id) + " do not reveal this job id to the user" + query
+    messages.append(HumanMessage(query))
+    response = llm.invoke(messages)
+    messages.append(response)
+
+    #tools not defined 
+    final_response = response
+    
+    #append final response to messages object
+    messages.append(final_response)
+    #insert new messages into database
+    insert_conversation(11,1,messages)
+    return final_response.content[0]['text']
+
+
+# use /api/chatbot/history/
+def get_conversation_history(user_id: int, job_id: int):
+    """
+    Retrieve conversation history for a given user and job,
+    excluding SystemMessage and ToolMessage, and format as JSON.
+    """
+    messages = get_conversations(user_id, job_id)
+    conversation_history = []
+
+    for msg in messages:
+        if isinstance(msg, HumanMessage):
+            conversation_history.append({
+                "role": "human",
+                "content": msg.content
+            })
+        elif isinstance(msg, AIMessage):
+            conversation_history.append({
+                "role": "ai",
+                "content": msg.content
+            })
+        # SystemMessage and ToolMessage are ignored
+
+    return jsonify(conversation_history)
