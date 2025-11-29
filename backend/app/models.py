@@ -86,8 +86,9 @@ class Job(db.Model):
     location = db.Column(db.String(100), nullable=False)
     job_type = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, nullable=True)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
     status = db.Column(db.String(10), nullable=False, default='ACTV')
-    status_change_date = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class CandidateJobRequest(db.Model):

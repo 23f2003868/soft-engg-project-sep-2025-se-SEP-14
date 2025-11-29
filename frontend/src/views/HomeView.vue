@@ -99,8 +99,6 @@
         </div>
       </div>
     </section>
-
-    <!-- Trusted Companies Section -->
     <section class="company-section py-5 bg-light border-top">
       <div class="container text-center">
         <h2 class="fw-bold text-primary mb-4">Trusted by Top Companies</h2>
@@ -116,8 +114,6 @@
         </div>
       </div>
     </section>
-
-    <!-- Testimonial Section -->
     <section class="testimonial-section py-5 text-center text-white">
       <div class="container">
         <h2 class="fw-bold mb-4 text-primary">What Our Users Say</h2>
@@ -243,7 +239,6 @@ const testimonials = ref([
   --accent-color: #00c6ff;
 }
 
-/* Hero Section */
 .hero-section {
   min-height: 90vh;
   display: flex;
@@ -314,8 +309,6 @@ const testimonials = ref([
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-10px); }
 }
-
-/* Features */
 .feature-card {
   border: 1px solid #e3f2fd;
   transition: all 0.3s ease;
@@ -331,8 +324,6 @@ const testimonials = ref([
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
 }
-
-/* Stats  */
 .stats-section h2 {
   animation: fadeIn 1.2s ease-in;
 }
@@ -340,8 +331,6 @@ const testimonials = ref([
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
-/* Trusted Companies  */
 .trusted-logos {
   display: flex;
   flex-wrap: wrap;
@@ -381,7 +370,6 @@ const testimonials = ref([
   transform: scale(1.1);
 }
 
-/*  Responsive */
 @media (max-width: 992px) {
   .logo-card {
     width: 130px;

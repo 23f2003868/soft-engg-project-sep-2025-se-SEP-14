@@ -1,9 +1,9 @@
 <template>
-  <nav class="navbar navbar-expand-lg bg-white shadow-sm sticky-top px-4 py-3 recruiter-navbar">
+  <nav class="navbar navbar-expand-lg bg-white shadow-sm sticky-top px-4 py-3 candidate-navbar">
     <div class="container-fluid">
       <!-- Brand -->
-      <router-link to="/recruiter" class="navbar-brand fw-bold text-primary">
-        Recruiter Dashboard
+      <router-link to="/candidate" class="navbar-brand fw-bold text-primary">
+        Candidate Dashboard
       </router-link>
 
       <!-- Toggler -->
@@ -11,38 +11,31 @@
         class="navbar-toggler border-0"
         type="button"
         data-bs-toggle="collapse"
-        data-bs-target="#recruiterNav"
-        aria-controls="recruiterNav"
+        data-bs-target="#candidateNav"
+        aria-controls="candidateNav"
         aria-expanded="false"
       >
         <i class="bi bi-list fs-3 text-primary"></i>
       </button>
 
       <!-- Nav Links -->
-      <div class="collapse navbar-collapse" id="recruiterNav">
+      <div class="collapse navbar-collapse" id="candidateNav">
         <ul class="navbar-nav mx-auto text-center">
           <li class="nav-item">
-            <router-link to="/recruiter" class="nav-link" active-class="active">
+            <router-link to="/candidate" class="nav-link" active-class="active">
               <i class="bi bi-speedometer2 me-2"></i> Dashboard
             </router-link>
           </li>
 
           <li class="nav-item">
-            <router-link to="/recruiter/profile" class="nav-link" active-class="active">
+            <router-link to="/candidate/profile" class="nav-link" active-class="active">
               <i class="bi bi-person me-2"></i> Profile
-            </router-link>
-          </li>
-
-          <!-- ✅ New Smart Candidate Tracker Nav Item -->
-          <li class="nav-item">
-            <router-link to="/recruiter/tracker" class="nav-link" active-class="active">
-              <i class="bi bi-kanban me-2"></i> Tracker
             </router-link>
           </li>
         </ul>
 
         <!-- Icons / Right Side -->
-<div class="d-flex align-items-center justify-content-center justify-content-lg-end gap-3 mt-3 mt-lg-0">
+        <div class="d-flex align-items-center justify-content-center justify-content-lg-end gap-3 mt-3 mt-lg-0">
   <i class="bi bi-bell fs-5 text-primary position-relative notification-icon">
     <span class="badge bg-danger position-absolute top-0 start-100 translate-middle p-1 border border-light rounded-circle"></span>
   </i>
@@ -57,7 +50,6 @@
     Logout
   </button>
 </div>
-
       </div>
     </div>
   </nav>
@@ -84,12 +76,10 @@ const logout = () => {
 
   router.push("/login");
 };
-
-
 </script>
 
 <style scoped>
-.recruiter-navbar {
+.candidate-navbar {
   backdrop-filter: blur(8px);
   z-index: 1000;
 }
@@ -114,13 +104,6 @@ const logout = () => {
   font-weight: 600;
 }
 
-/* Add space between nav items on large screens only */
-@media (min-width: 992px) {
-  .navbar-nav .nav-item + .nav-item {
-    margin-left: 20px;
-  }
-}
-
 /* Notification dot */
 .notification-icon .badge {
   width: 8px;
@@ -139,6 +122,13 @@ const logout = () => {
   .nav-link {
     display: block;
     padding: 10px;
+  }
+}
+
+/* Space between items for large screens */
+@media (min-width: 992px) {
+  .navbar-nav .nav-item + .nav-item {
+    margin-left: 20px;
   }
 }
 </style>

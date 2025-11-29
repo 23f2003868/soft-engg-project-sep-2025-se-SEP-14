@@ -1,17 +1,32 @@
-# Project Description
+# Job Portal Application (ApplAI)  — Full Stack
 
-This is a job portal application that supports full user flows for Candidates, Recruiters, and Hiring Managers.
+This is a job portal application that supports complete user flows for Candidates, Recruiters, and Hiring Managers. The system includes a Vue-based frontend and a Flask-based backend, both working together as a complete full-stack solution.
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Technology | Purpose |
-| :--- | :--- |
-| **Vue 3** | Core JavaScript Framework (Composition API) |
-| **Vue Router** | Client-Side Routing for page navigation |
-| **Vuex** | State Management (for global data) |
-| **Vite** | Project Scaffolding and Build Tool |
+### Frontend
+| Technology     | Purpose                                  |
+| -------------- | ---------------------------------------- |
+| **Vue 3**      | Main frontend framework                  |
+| **Vue Router** | Handles page navigation                  |
+| **Vuex**       | Global state management                  |
+| **Vite**       | Project scaffolding & development server |
+
+
+
+### Backend
+| Technology            | Purpose                      |
+| --------------------- | ---------------------------- |
+| **Flask**             | Backend framework            |
+| **SQLAlchemy**        | ORM for database operations  |
+| **JWT**               | Token-based auth for APIs    |
+| **Flask-Login**       | Authentication handler       |
+| **Werkzeug**          | Security + file uploads      |
+| **Google Gemini API** | AI job description generator |
+| **Redis (optional)**  | Caching layer                |
+
 
 ---
 
@@ -20,36 +35,69 @@ This is a job portal application that supports full user flows for Candidates, R
 The project uses **Vue Router** for client-side navigation.  
 Below is a complete list of routes and their corresponding components.
 
-| **Path** | **Route Name** | **Component** | **Description** |
-|-----------|----------------|----------------|------------------|
-| `/` | `home` | `HomeView.vue` | Landing page of the application |
-| `/login` | `login` | `LogIn.vue` | Login page for existing users |
-| `/signup` | `signup` | `SignUp.vue` | Registration page for new users |
-| `/about` | `about` | `About.vue` | Information about the platform |
-| `/contact` | `contact` | `Contact.vue` | Contact page for help and support |
-| `/jobs` | `job` | `JobListing.vue` | Displays all job listings |
-| `/recruiter` | `recruiter-dashboard` | `RecruiterDashboard.vue` | Main dashboard for recruiters |
-| `/recruiter/profile` | `recruiter-profile` | `RecruiterProfile.vue` | Manage recruiter profile information |
-| `/recruiter/tracker` | `SmartCandidateTracker` | `SmartCandidateTracker.vue` | Smart tracking system |
-| `/candidate` | `candidate-dashboard` | `CandidateDashboard.vue` | Dashboard for candidates |
-| `/candidate/profile` | `candidate-profile` | `CandidateProfile.vue` | Candidate profile management page |
+| **Path**             | **Route Name**          | **Component**               | **Description**          |
+| -------------------- | ----------------------- | --------------------------- | ------------------------ |
+| `/`                  | `home`                  | `HomeView.vue`              | Landing page             |
+| `/login`             | `login`                 | `LogIn.vue`                 | Login page               |
+| `/signup`            | `signup`                | `SignUp.vue`                | Register new user        |
+| `/about`             | `about`                 | `About.vue`                 | About the platform       |
+| `/contact`           | `contact`               | `Contact.vue`               | Contact & support        |
+| `/jobs`              | `job`                   | `JobListing.vue`            | All job listings         |
+| `/recruiter`         | `recruiter-dashboard`   | `RecruiterDashboard.vue`    | Main recruiter dashboard |
+| `/recruiter/profile` | `recruiter-profile`     | `RecruiterProfile.vue`      | Update recruiter details |
+| `/recruiter/tracker` | `SmartCandidateTracker` | `SmartCandidateTracker.vue` | Applicant tracking       |
+| `/candidate`         | `candidate-dashboard`   | `CandidateDashboard.vue`    | Candidate dashboard      |
+| `/candidate/profile` | `candidate-profile`     | `CandidateProfile.vue`      | Update candidate details |
 
 ---
 
-## 📁 Project Structure
+## 🧪 API Endpoints Overview
+
+### 🔐 Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/login` | Login (JWT) |
+| POST | `/api/logout` | Logout |
+
+### 👤 Candidate
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/register-candidate` | Register |
+| POST | `/api/update-candidate` | Update profile |
+| GET | `/api/candidate-job-requests` | Get job applications |
+
+### 🧑‍💼 Recruiter
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/register-recruiter` | Register |
+| POST | `/api/update-recruiter` | Update profile |
+| GET | `/api/jobs` | Get jobs created |
+| POST | `/api/job` | Create job |
+| PUT | `/api/job/<id>` | Update job |
+
+### 🤖 Chatbot
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/chatbot/response` | Get chatbot reply |
+| GET | `/api/chatbot/history` | Fetch history |
+
+---
+
+## 📁 Project Structure (Frontend)
 
 ```
 frontend/
 ├── public/
 │   └── images/
-│       ├── Anushka.jpg
-│       ├── Deval.jpg
-│       ├── Mangesh.jpg
-│       ├── Prasoon.jpg
-│       ├── Praul.jpg
-│       ├── Shyaam.jpg
-│       ├── Suvrat.jpg
-│       └── Tripurari.jpg
+│       └── team/
+│           ├── Anushka.jpg
+│           ├── Deval.jpg
+│           ├── Mangesh.jpg
+│           ├── Prasoon.jpg
+│           ├── Praul.jpg
+│           ├── Shyaam.jpg
+│           ├── Suvrat.jpg
+│           └── Tripurari.jpg
 │
 ├── src/
 │   ├── assets/
@@ -59,8 +107,7 @@ frontend/
 │   │   ├── Footer.vue
 │   │   ├── JobManagement.vue
 │   │   ├── Navbar.vue
-│   │   ├── RecruiterNavbar.vue
-│   │   └── RecruiterStatsCard.vue
+│   │   └── RecruiterNavbar.vue
 │   │
 │   ├── router/
 │   │   └── index.js
@@ -92,17 +139,27 @@ frontend/
 
 ---
 
-## 📁 Key Folders
+## 📁 Project Structure (Backend)
 
-The application is structured for scalability:
-
-* **`src/views/`**: Contains full-page components (e.g., LogIn, Dashboard).
-* **`src/components/`**: Contains small, reusable UI elements (e.g., Button, Navbar).
-* **`src/router/`**: Defines all application routes (URLs).
-* **`src/assets/`**: Holds global styles, images, and fonts.
+```
+backend/
+│
+├── app/
+│   ├── __init__.py
+│   ├── models.py
+│   ├── routes.py
+│   ├── forms.py
+│   └── api.py
+│
+├── config.py
+├── celery_worker.py
+├── requirements.txt
+├── Team 14_APIs_YAMLfile.yaml
+├── README.md
+└── run.py
+```
 
 ---
-
 
 ## 🚀 Getting Started
 
@@ -125,9 +182,45 @@ cd frontend
 npm install
 ```
 
-### 4. Run the Development Server
+### 4. Run Frontend
 ```bash
 npm run dev
 ```
 
-The application will now be running on `http://localhost:5173/`
+### 5. Create and activate virtual environment
+```bash
+cd backend
+python -m venv venv
+venv/Scripts/activate   (Windows)
+source venv/bin/activate (Linux/Mac)
+```
+
+### 6. Install dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 7. Add Environment Variables  
+Create a `.env` file:
+
+```bash
+GOOGLE_API_KEY=your_key
+```
+
+### 8. Initialize Database
+```bash
+>>> flask db init
+>>> flask db migrate -m "initial db"
+>>> flask db upgrade
+```
+
+### 9. Run Backend
+```bash
+python run.py
+```
+
+Server runs at:
+```bash
+http://localhost:5173/  (Frontend)
+http://127.0.0.1:5000   (Backend)
+```

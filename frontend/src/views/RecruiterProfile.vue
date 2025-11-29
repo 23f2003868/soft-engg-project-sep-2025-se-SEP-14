@@ -4,78 +4,61 @@
   <section class="profile-section py-5">
     <div class="container">
       <div class="text-center mb-4 fade-in">
-        <h2 class="fw-bold text-primary">Recruiter Profile</h2>
-        <p class="text-muted">Update your company and role details</p>
+        <h2 class="fw-bold text-gradient">Recruiter Profile</h2>
+        <p class="text-muted">Update your company details</p>
       </div>
 
-      <div class="bg-white p-4 rounded-4 shadow-sm fade-in">
+      <div class="profile-card shadow-lg p-4 p-md-5 fade-in">
+
         <form @submit.prevent="saveProfile">
-          <div class="mb-3">
-            <label class="form-label">Full Name</label>
-            <input
-              v-model.trim="profile.name"
-              type="text"
-              class="form-control"
-              placeholder="Enter your full name"
-              required
-            />
+
+          <!-- FIRST NAME -->
+          <div class="form-floating mb-3">
+            <input v-model.trim="profile.firstname" type="text" class="form-control" placeholder="First Name" required />
+            <label>First Name</label>
           </div>
 
-          <div class="mb-3">
-            <label class="form-label">Email</label>
-            <input
-              v-model.trim="profile.email"
-              type="email"
-              class="form-control"
-              placeholder="Enter your email"
-              required
-            />
+          <!-- LAST NAME -->
+          <div class="form-floating mb-3">
+            <input v-model.trim="profile.lastname" type="text" class="form-control" placeholder="Last Name" required />
+            <label>Last Name</label>
           </div>
 
-          <div class="mb-3">
-            <label class="form-label">Company Name</label>
-            <input
-              v-model.trim="profile.company"
-              type="text"
-              class="form-control"
-              placeholder="Enter your company name"
-              required
-            />
+          <!-- EMAIL -->
+          <div class="form-floating mb-3">
+            <input v-model.trim="profile.email" type="email" class="form-control" placeholder="Email" required />
+            <label>Email</label>
           </div>
 
-          <div class="mb-3">
-            <label class="form-label">Position</label>
-            <input
-              v-model.trim="profile.position"
-              type="text"
-              class="form-control"
-              placeholder="Enter your job position"
-              required
-            />
+          <!-- COMPANY -->
+          <div class="form-floating mb-3">
+            <input v-model.trim="profile.company" type="text" class="form-control" placeholder="Company Name" required />
+            <label>Company Name</label>
           </div>
 
-          <div class="mb-3">
-            <label class="form-label">LinkedIn Profile</label>
-            <input
-              v-model.trim="profile.linkedin"
-              type="url"
-              class="form-control"
-              placeholder="https://linkedin.com/in/username"
-            />
+          <!-- POSITION -->
+          <div class="form-floating mb-3">
+            <input v-model.trim="profile.position" type="text" class="form-control" placeholder="Position" required />
+            <label>Position</label>
           </div>
 
+          <!-- LINKEDIN -->
+          <div class="form-floating mb-3">
+            <input v-model.trim="profile.linkedin" type="url" class="form-control" placeholder="LinkedIn Profile" />
+            <label>LinkedIn Profile</label>
+          </div>
+
+          <!-- BUTTON -->
           <div class="text-end mt-4">
-            <button
-              type="submit"
-              class="btn btn-primary rounded-3 shadow-sm"
-              :disabled="isSaving"
-            >
+            <button type="submit" class="btn btn-gradient rounded-3 shadow-sm px-4" :disabled="isSaving">
               <i v-if="isSaving" class="bi bi-hourglass-split me-2"></i>
               <i v-else class="bi bi-save me-2"></i>
-              {{ isSaving ? 'Saving...' : 'Save Changes' }}
+              {{ isSaving ? "Saving..." : "Save Changes" }}
             </button>
           </div>
+
         </form>
+
       </div>
     </div>
   </section>
@@ -86,98 +69,162 @@ import Navbar from '../components/RecruiterNavbar.vue';
 import { ref, onMounted } from 'vue';
 import Swal from 'sweetalert2';
 
-// Recruiter profile data
+const API_URL = "http://127.0.0.1:5000";
+const token = localStorage.getItem("token");
+
 const profile = ref({
-  name: '',
-  email: '',
-  company: '',
-  position: '',
-  linkedin: '',
+  firstname: "",
+  lastname: "",
+  email: "",
+  company: "",
+  position: "",
+  linkedin: ""
 });
 
-// Simulated loading state
 const isSaving = ref(false);
 
-// Dummy data prefill
-onMounted(() => {
-  profile.value = {
-    name: 'Riya Sharma',
-    email: 'riya.sharma@technova.in',
-    company: 'TechNova Pvt. Ltd.',
-    position: 'HR Manager',
-    linkedin: 'https://linkedin.com/in/riyasharma',
-  };
+onMounted(async () => {
+  try {
+    const res = await fetch(`${API_URL}/api/index`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    const data = await res.json();
+    if (!data.success) return;
+
+    const user = data.user;
+
+    profile.value.firstname = user.firstname;
+    profile.value.lastname = user.lastname;
+    profile.value.email = user.email;
+    profile.value.company = user.recruiter.company;
+    profile.value.position = user.recruiter.position;
+    profile.value.linkedin = user.recruiter.linkdin_profile_path;
+
+  } catch (err) {
+    console.error("Profile fetch failed:", err);
+  }
 });
 
-// Save function with validation and error handling
 const saveProfile = async () => {
+
+  if (!profile.value.firstname || !profile.value.lastname || !profile.value.email || !profile.value.company || !profile.value.position) {
+    Swal.fire({
+      icon: "warning",
+      title: "Missing Information",
+      text: "Please fill all required fields."
+    });
+    return;
+  }
+
+  isSaving.value = true;
+
+  const body = {
+    firstname: profile.value.firstname,
+    lastname: profile.value.lastname,
+    email: profile.value.email,
+    company: profile.value.company,
+    position: profile.value.position,
+    linkdin_profile_path: profile.value.linkedin
+  };
+
   try {
-    // Simple validation
-    if (
-      !profile.value.name ||
-      !profile.value.email ||
-      !profile.value.company ||
-      !profile.value.position
-    ) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Incomplete Information',
-        text: 'Please fill out all required fields before saving.',
-      });
+    const res = await fetch(`${API_URL}/api/update-recruiter`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      Swal.fire({ icon: "error", title: "Update Failed", text: data.error });
       return;
     }
 
-    isSaving.value = true;
-
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    // Simulate saving in localStorage
-    localStorage.setItem('recruiterProfile', JSON.stringify(profile.value));
-
     Swal.fire({
-      icon: 'success',
-      title: 'Profile Updated',
-      text: 'Recruiter profile saved successfully!',
-      timer: 2000,
-      showConfirmButton: false,
+      icon: "success",
+      title: "Profile Updated",
+      text: "Your profile has been successfully updated!",
+      timer: 1800,
+      showConfirmButton: false
     });
+
   } catch (error) {
-    Swal.fire({
-      icon: 'error',
-      title: 'Something went wrong!',
-      text: error.message || 'Failed to save your profile. Please try again later.',
-    });
-  } finally {
-    isSaving.value = false;
+    Swal.fire({ icon: "error", title: "Error", text: error.message });
   }
+
+  isSaving.value = false;
 };
 </script>
 
 <style scoped>
 .profile-section {
-  background-color: #f8f9fa;
+  background: linear-gradient(120deg, #eef4ff, #e6f0ff);
+  min-height: calc(100vh - 80px);
 }
-.form-label {
-  font-weight: 600;
+
+/* Premium Card */
+.profile-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(14px);
+  border-radius: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  transition: 0.3s ease;
 }
+
+.profile-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px rgba(0, 114, 255, 0.15);
+}
+
+/* Floating Labels */
+.form-floating > label {
+  padding-left: 12px;
+}
+
+.form-control {
+  height: 48px !important;
+  border-radius: 12px !important;
+  border: 1.5px solid #d4d9e1;
+  transition: all 0.2s ease-in-out;
+}
+
+.form-control:focus {
+  border-color: #0b5ed7;
+  box-shadow: 0 0 0 0.15rem rgba(11, 94, 215, 0.25);
+}
+
+/* Gradient Title */
+.text-gradient {
+  background: linear-gradient(90deg, #00c6ff, #0072ff);
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* Save Button */
+.btn-gradient {
+  background: linear-gradient(90deg, #0072ff, #00c6ff);
+  color: #fff;
+  transition: all 0.3s ease;
+}
+
+.btn-gradient:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 114, 255, 0.25);
+}
+
+/* Animation */
 .fade-in {
   animation: fadeIn 0.8s ease forwards;
 }
+
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-button {
-  transition: 0.3s;
-}
-button:hover {
-  transform: translateY(-2px);
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 </style>

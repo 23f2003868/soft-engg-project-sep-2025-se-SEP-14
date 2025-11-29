@@ -107,36 +107,67 @@ def token_required(f):
 
     return decorated
 
+
 @main.route('/api/login', methods=['POST'])
 def api_login():
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
-
     try:
+        data = request.get_json() or {}
+
+        email = data.get("email", "").strip()
+        password = data.get("password", "").strip()
+
+        # ---------------------- VALIDATION ----------------------
+        errors = {}
+
+        if not email:
+            errors["email"] = "Email is required."
+        if not password:
+            errors["password"] = "Password is required."
+
+        if errors:
+            return jsonify({
+                "success": False,
+                "message": "Validation errors",
+                "errors": errors
+            }), 422  # Unprocessable Entity
+
+        # ---------------------- USER CHECK ----------------------
         user = User.query.filter_by(email=email, status="ACTV").first()
 
-        if user and check_password_hash(user.password, password):
-
-            token = generate_jwt_token(user)
-
+        if not user or not check_password_hash(user.password, password):
             return jsonify({
-                "success": True,
-                "message": "Login successful!",
-                "token": token,
-                "expires_in_minutes": 30
-            }), 200
+                "success": False,
+                "message": "Invalid email or password."
+            }), 401
+
+        # ---------------------- SUCCESS ----------------------
+        token = generate_jwt_token(user)
+
+        print("LOGIN USER FIRSTNAME =", user.firstname) 
 
         return jsonify({
-            "success": False,
-            "message": "Invalid email or password."
-        }), 401
+            "success": True,
+            "message": "Login successful!",
+            "token": token,
+            "expires_in_minutes": 30,
+            "user": {
+                "id": user.user_id,
+                "email": user.email,
+                "role": user.role,
+                "firstname": user.firstname
+            }
+        }), 200
+        
+    
 
     except Exception as e:
         return jsonify({
             "success": False,
-            "message": f"An error occurred: {str(e)}"
+            "message": "Server error",
+            "error": str(e)
         }), 500
+
+
 
 @main.route('/api/logout', methods=['POST'])
 @token_required
@@ -159,7 +190,9 @@ def logout_api(current_user):
 @main.route('/api/index', methods=['POST'])
 @token_required
 def api_index(current_user):
-    user_data = {
+    try:
+        # Base user data
+        user_data = {
             "id": str(current_user.user_id),
             "email": current_user.email,
             "role": current_user.role,
@@ -167,54 +200,52 @@ def api_index(current_user):
             "lastname": current_user.lastname,
             "status": current_user.status
         }
-    email = current_user.email
 
-    try:
-        user = User.query.filter_by(email=email, status="ACTV").first()
-        if user:
-            # Serialize the user object manually
-            candidate_data={}
-            recruiter_data={}
-            if user.role=="CANDIDATE":
-                candidate_data = {
-                    'candidate_id': str(user.candidate.candidate_id),
-                    'age':str(user.candidate.age),
-                    'education':str(user.candidate.education),
-                    'resume_file_path':str(user.candidate.resume_file_path),
-                    }
-            if user.role=="RECRUITER":
-                recruiter_data = {
-                    'recruiter_id': str(user.recruiter.recruiter_id),
-                    'company':user.recruiter.company,
-                    'position':user.recruiter.position,
-                    'linkdin_profile_path':user.recruiter.linkdin_profile_path,
-                    }
-            user_data = {
-                "id":  str(user.user_id),
-                "email": user.email,
-                "role": user.role,
-                'firstname':user.firstname,
-                'lastname':user.lastname,
-                "status": user.status,
-                "candidate":candidate_data,
-                "recruiter":recruiter_data
+        # ------------------------------------
+        #    ADD CANDIDATE DETAILS
+        # ------------------------------------
+        if current_user.role == "CANDIDATE":
+            candidate = Candidate.query.filter_by(user_id=current_user.user_id).first()
+            if not candidate:
+                return jsonify({"success": False, "message": "Candidate profile missing"}), 404
 
+            user_data["candidate"] = {
+                "candidate_id": str(candidate.candidate_id),
+                "age": candidate.age,
+                "education": candidate.education,
+                "resume_file_path": candidate.resume_file_path
             }
-            return jsonify({
-                "success": True,
-                "message": "Login successful!",
-                "user": user_data
-            }), 200
-        else:
-            return jsonify({
-                "success": False,
-                "message": "Invalid email or password."
-            }), 401
+
+        # ------------------------------------
+        #    ADD RECRUITER DETAILS
+        # ------------------------------------
+        elif current_user.role == "RECRUITER":
+            recruiter = Recruiter.query.filter_by(user_id=current_user.user_id).first()
+            if not recruiter:
+                return jsonify({"success": False, "message": "Recruiter profile missing"}), 404
+
+            user_data["recruiter"] = {
+                "recruiter_id": str(recruiter.recruiter_id),
+                "company": recruiter.company,
+                "position": recruiter.position,
+                "linkdin_profile_path": recruiter.linkdin_profile_path
+            }
+
+        # ------------------------------------
+        # SUCCESS RESPONSE
+        # ------------------------------------
+        return jsonify({
+            "success": True,
+            "message": "User data loaded",
+            "user": user_data
+        }), 200
+
     except Exception as e:
         return jsonify({
             "success": False,
             "message": f"An error occurred: {str(e)}"
         }), 500
+
 
 
 def get_token_from_header():
@@ -228,50 +259,124 @@ def get_token_from_header():
 from flask import request, jsonify
 from werkzeug.security import generate_password_hash
 
+def normalize_description(desc):
+    """Ensure job.description is always returned as clean text."""
+    if desc is None:
+        return ""
+
+    # Already clean string
+    if isinstance(desc, str):
+        return desc
+
+    # If list → join recursively
+    if isinstance(desc, list):
+        parts = [normalize_description(x) for x in desc]
+        return "\n".join([p for p in parts if p])
+
+    # If dict → extract known fields
+    if isinstance(desc, dict):
+        pieces = []
+
+        if "text" in desc:
+            pieces.append(desc["text"])
+
+        if "value" in desc:
+            pieces.append(desc["value"])
+
+        if "children" in desc:
+            pieces.append(normalize_description(desc["children"]))
+
+        # Recursively extract
+        for key, value in desc.items():
+            if key not in ["text", "value", "children"]:
+                pieces.append(normalize_description(value))
+
+        return "\n".join(pieces)
+
+    # Fallback → convert to string
+    return str(desc)
+
+
 @main.route('/api/register-recruiter', methods=['POST'])
 def register_recruiter():
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No input data provided"}), 400
+        data = request.get_json() or {}
 
-        # Validate required fields
-        required_fields = [
-            'firstname', 'lastname', 'email', 'password', 'company',
-            'position', 'linkdin_profile_path'
+        # ---------------------- VALIDATION ----------------------
+        required = [
+            "firstname", "lastname", "email", "password",
+            "company", "position", "linkdin_profile_path"
         ]
-        for field in required_fields:
-            if not data.get(field):
-                return jsonify({"error": f"Missing field: {field}"}), 400
 
-        # Prepare user and recruiter data
-        hashed_password = generate_password_hash(data['password'])
-        new_user=User(
-                firstname=data['firstname'],
-                lastname=data['lastname'],
-                email=data['email'],
-                password=hashed_password,
-                role='RECRUITER',
-                status='ACTV'
+        errors = {}
+
+        for field in required:
+            if not data.get(field):
+                errors[field] = f"{field.replace('_', ' ').title()} is required."
+
+        # Email validation
+        if data.get("email") and "@" not in data["email"]:
+            errors["email"] = "Please enter a valid email address."
+
+        # If any validation errors
+        if errors:
+            return jsonify({
+                "success": False,
+                "message": "Validation errors",
+                "errors": errors
+            }), 422
+
+        # ---------------------- DUPLICATE EMAIL CHECK ----------------------
+        existing_user = User.query.filter_by(email=data["email"]).first()
+        if existing_user:
+            return jsonify({
+                "success": False,
+                "message": "Email already registered.",
+                "errors": {"email": "This email is already in use."}
+            }), 409  # Conflict
+
+        # ---------------------- CREATE USER ----------------------
+        hashed_password = generate_password_hash(data["password"])
+
+        new_user = User(
+            firstname=data["firstname"],
+            lastname=data["lastname"],
+            email=data["email"],
+            password=hashed_password,
+            role="RECRUITER",
+            status="ACTV"
         )
         db.session.add(new_user)
         db.session.commit()
 
+        # ---------------------- CREATE RECRUITER ----------------------
         new_recruiter = Recruiter(
-            company = data['company'],
             user_id=new_user.user_id,
-            position =data['position'],
-            linkdin_profile_path=data['linkdin_profile_path'],
-            status = 'ACTV'
+            company=data["company"],
+            position=data["position"],
+            linkdin_profile_path=data["linkdin_profile_path"],
+            status="ACTV"
         )
-        
-
         db.session.add(new_recruiter)
         db.session.commit()
-        return jsonify({"message": "Recruiter register Successfully."}), 200
+
+        return jsonify({
+            "success": True,
+            "message": "Recruiter registered successfully.",
+            "data": {
+                "user_id": new_user.user_id,
+                "email": new_user.email,
+                "role": new_user.role
+            }
+        }), 201  # Created
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "message": "Server error occurred.",
+            "error": str(e)
+        }), 500
 
 
 @main.route('/api/update-recruiter', methods=['POST'])
@@ -280,31 +385,56 @@ def update_recruiter(current_user):
     try:
         data = request.get_json()
         if not data:
-            return jsonify({"error": "No input data provided"}), 400
+            return jsonify({"success": False, "error": "No input data provided"}), 400
 
-        # Retrieve the user using the email (as email is unique)
-        email = current_user.email
-        user = User.query.filter_by(email=email, status="ACTV").first()
-        
+        # ---- VALIDATE REQUIRED FIELDS ----
+        required_fields = ['firstname', 'lastname', 'email', 'company', 'position']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({"success": False, "error": f"{field} is required"}), 400
+
+        # ---- FETCH USER ----
+        user = User.query.filter_by(user_id=current_user.user_id, status="ACTV").first()
         if not user:
-            return jsonify({"error": "User not found"}), 404
+            return jsonify({"success": False, "error": "User not found"}), 404
 
-        # Update customer details (excluding password)
-        user.firstname = data.get('firstname', user.firstname)
-        user.lastname = data.get('lastname', user.lastname)
-        user.email = data.get('email', user.email)
-        recruiter = Recruiter.query.filter_by(user_id=user.user_id).first()
+        # ---- CHECK EMAIL DUPLICATION ----
+        if data["email"] != user.email:
+            existing_user = User.query.filter_by(email=data["email"]).first()
+            if existing_user:
+                return jsonify({"success": False, "error": "Email already in use"}), 400
+
+        # ---- FETCH RECRUITER RECORD ----
+        recruiter = Recruiter.query.filter_by(user_id=user.user_id, status="ACTV").first()
         if not recruiter:
-            return jsonify({"error": "Recruiter not found"}), 404
-        recruiter.company = data['company']
-        recruiter.position = data['position']
-        recruiter.linkdin_profile_path=data['position']
+            return jsonify({"success": False, "error": "Recruiter profile not found"}), 404
+
+        # ---- VALIDATE LINKEDIN URL ----
+        linkedin = data.get("linkdin_profile_path", "")
+        if linkedin and not linkedin.startswith("http"):
+            return jsonify({"success": False, "error": "Invalid LinkedIn URL"}), 400        
+
+        # ---- UPDATE USER ----
+        user.firstname = data.get("firstname", user.firstname)
+        user.lastname = data.get("lastname", user.lastname)
+        user.email = data.get("email", user.email)
+
+        # ---- UPDATE RECRUITER ----
+        recruiter.company = data.get("company", recruiter.company)
+        recruiter.position = data.get("position", recruiter.position)
+        recruiter.linkdin_profile_path = linkedin
 
         db.session.commit()
 
-        return jsonify({"message": "Recruiter details updated successfully!"}), 200
+        return jsonify({
+            "success": True,
+            "message": "Recruiter details updated successfully"
+        }), 200
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 
 @main.route('/api/jobs', methods=['GET'])
@@ -312,10 +442,7 @@ def update_recruiter(current_user):
 def get_jobs(current_user):
     try:
         if current_user.role=="RECRUITER":
-            jobs_data = Job.query.filter(
-                Job.status == 'ACTV',
-                Job.created_by == current_user.user_id
-            ).all()
+            jobs_data = Job.query.filter_by(created_by=current_user.user_id, status="ACTV").all()
 
             jobs = []
             for job in jobs_data:
@@ -324,12 +451,13 @@ def get_jobs(current_user):
                     "job_title": job.job_title,
                     "location": job.location,
                     "job_type": job.job_type,
-                    "description": job.description,
+                    "description": normalize_description(job.description),
+                    "start_date": str(job.start_date),
+                    "end_date": str(job.end_date),
                     "status": job.status
                 })
 
             return jsonify({
-                "count": len(jobs),
                 "jobs": jobs
             }), 200
         else:
@@ -351,86 +479,198 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # Ensure the folder exists
 @main.route('/api/register-candidate', methods=['POST'])
 def register_candidate():
     try:
-        # redis_client.delete('all_professionals')
-        if 'file' not in request.files or 'user_data' not in request.form:
-            return jsonify({"error": "Missing file or user data"}), 400
+        # ---------------------- Check File + Form ----------------------
+        if "file" not in request.files:
+            return jsonify({
+                "success": False,
+                "message": "Resume file is required.",
+                "errors": {"file": "Please upload a resume file."}
+            }), 400
 
-        user_data = json.loads(request.form['user_data'])
-        file = request.files['file']
+        if "user_data" not in request.form:
+            return jsonify({
+                "success": False,
+                "message": "User data is missing.",
+                "errors": {"user_data": "User data is required in form-data."}
+            }), 400
 
+        # Parse user_data from JSON string
+        try:
+            user_data = json.loads(request.form["user_data"])
+        except:
+            return jsonify({
+                "success": False,
+                "message": "Invalid user_data format. Must be JSON."
+            }), 400
+
+        file = request.files["file"]
+
+        # ---------------------- VALIDATION ----------------------
+        required = ["firstname", "lastname", "email", "password", "education", "age"]
+        errors = {}
+
+        for field in required:
+            if not user_data.get(field):
+                errors[field] = f"{field.replace('_', ' ').title()} is required."
+
+        # Email format
+        if user_data.get("email") and "@" not in user_data["email"]:
+            errors["email"] = "Please enter a valid email address."
+
+        # Password
+        if user_data.get("password") and len(user_data["password"]) < 6:
+            errors["password"] = "Password must be at least 6 characters."
+
+        # Age
+        if user_data.get("age"):
+            try:
+                if int(user_data["age"]) < 18:
+                    errors["age"] = "Minimum age must be 18."
+            except:
+                errors["age"] = "Age must be a number."
+
+        # If validation errors exist
+        if errors:
+            return jsonify({
+                "success": False,
+                "message": "Validation errors",
+                "errors": errors
+            }), 422
+
+        # ---------------------- Duplicate Email Check ----------------------
+        existing_user = User.query.filter_by(email=user_data["email"]).first()
+        if existing_user:
+            return jsonify({
+                "success": False,
+                "message": "Email already registered.",
+                "errors": {"email": "This email is already in use."}
+            }), 409
+
+        # ---------------------- Validate Resume File ----------------------
         if not allowed_file(file.filename):
-            return jsonify({"error": "Invalid file type"}), 400
+            return jsonify({
+                "success": False,
+                "message": "Invalid resume file type.",
+                "errors": {"file": "Allowed formats: PNG, JPG, JPEG, GIF, PDF"}
+            }), 400
 
-        # Generate a unique filename
-        original_filename = secure_filename(file.filename)
-        extension = os.path.splitext(original_filename)[1]
-        current_date = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_filename = f"{os.path.splitext(original_filename)[0]}_{current_date}{extension}"
+        # Create unique filename
+        original = secure_filename(file.filename)
+        ext = os.path.splitext(original)[1]
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        unique_filename = f"resume_{timestamp}{ext}"
         file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
 
-        # Save the file to the specified folder
+        # Save file
         file.save(file_path)
-        hashed_password = generate_password_hash(user_data['password'])
-        # Create User record
-        user = User(
-            firstname=user_data['firstname'],
-            lastname=user_data['lastname'],
-            email=user_data['email'],
+
+        # ---------------------- CREATE USER ----------------------
+        hashed_password = generate_password_hash(user_data["password"])
+        new_user = User(
+            firstname=user_data["firstname"],
+            lastname=user_data["lastname"],
+            email=user_data["email"],
             password=hashed_password,
             role="CANDIDATE",
             status="ACTV"
         )
-        db.session.add(user)
-        db.session.commit()
-        # Create Service Professional record
-        candidate = Candidate(
-            user_id=user.user_id,
-            education=user_data['education'],
-            age=user_data['age'],
-            resume_file_path=file_path,  # Save the full path
-            status="ACTV",
-        )
-        db.session.add(candidate)
+        db.session.add(new_user)
         db.session.commit()
 
-        return jsonify({"message": "Candidate Register Successfully!"}), 200
+        # ---------------------- CREATE CANDIDATE ----------------------
+        new_candidate = Candidate(
+            user_id=new_user.user_id,
+            education=user_data["education"],
+            age=user_data["age"],
+            resume_file_path=file_path,
+            status="ACTV"
+        )
+        db.session.add(new_candidate)
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Candidate registered successfully.",
+            "data": {
+                "user_id": new_user.user_id,
+                "email": new_user.email,
+                "role": new_user.role
+            }
+        }), 201
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "message": "Server error occurred.",
+            "error": str(e)
+        }), 500
 
 
 @main.route('/api/update-candidate', methods=['POST'])
 @token_required
 def update_candidate(current_user):
     try:
-        data = request.get_json()
+        # Ensure required payload exists
+        if 'user_data' not in request.form:
+            return jsonify({"error": "User data is required"}), 400
 
-        email = current_user.email
-        if not email:
-            return jsonify({"error": "Email is required"}), 400
+        user_data = json.loads(request.form['user_data'])
+        resume_file = request.files.get('file')
 
-        user = User.query.filter_by(email=email, status="ACTV").first()
+        # Fetch user + candidate
+        user = User.query.filter_by(user_id=current_user.user_id, status="ACTV").first()
         if not user:
             return jsonify({"error": "User not found"}), 404
-
-        # Update user fields
-        user.firstname = data.get('firstname', user.firstname)
-        user.lastname = data.get('lastname', user.lastname)
-        user.email = data.get('email', user.email)
 
         candidate = Candidate.query.filter_by(user_id=user.user_id).first()
         if not candidate:
             return jsonify({"error": "Candidate not found"}), 404
 
-        candidate.education = data.get('education', candidate.education)
-        candidate.age = data.get('age', candidate.age)
+        # -----------------------------
+        # VALIDATION (Fixes your issue)
+        # -----------------------------
+        required_fields = ["firstname", "lastname", "email", "age", "education"]
+
+        missing = [f for f in required_fields if not user_data.get(f)]
+
+        if missing:
+            return jsonify({
+                "error": f"Missing required fields: {', '.join(missing)}"
+            }), 400
+
+        # -----------------------------
+        # UPDATE FIELDS (safe update)
+        # -----------------------------
+        user.firstname = user_data["firstname"]
+        user.lastname = user_data["lastname"]
+        user.email = user_data["email"]
+
+        candidate.age = user_data["age"]
+        candidate.education = user_data["education"]
+
+        # -----------------------------
+        # OPTIONAL RESUME UPDATE
+        # -----------------------------
+        if resume_file:
+            original_filename = secure_filename(resume_file.filename)
+            extension = os.path.splitext(original_filename)[1]
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            unique_filename = f"{user.user_id}_{timestamp}{extension}"
+
+            file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
+            resume_file.save(file_path)
+
+            candidate.resume_file_path = file_path
 
         db.session.commit()
 
-        return jsonify({"message": "Candidate information updated successfully!"}), 200
+        return jsonify({"message": "Candidate updated successfully"}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
 
 
 def allowed_file(filename):
@@ -440,164 +680,199 @@ def allowed_file(filename):
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf'}
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+
 @main.route('/api/job', methods=['POST'])
 @token_required
 def create_job_api(current_user):
     try:
-        google_api_key = os.getenv("GOOGLE_API_KEY")
+        print("➡️ API HIT: /api/job (Create Job)")
 
+        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+        if not GOOGLE_API_KEY:
+            return jsonify({"success": False, "error": "GOOGLE_API_KEY not found"}), 500
+
+        # Only recruiters
+        if current_user.role != "RECRUITER":
+            return jsonify({"success": False, "message": "Only recruiters can create jobs."}), 403
+
+        data = request.get_json() or {}
+
+        # ------------------ VALIDATION ------------------
+        required = ["job_title", "location", "job_type", "description_keywords", "start_date", "end_date"]
+        errors = {f: f"{f.replace('_', ' ').title()} is required." for f in required if not data.get(f)}
+
+        if errors:
+            return jsonify({"success": False, "errors": errors}), 422
+
+        # ------------------ DATE PARSING ------------------
+        try:
+            start_date = datetime.datetime.strptime(data["start_date"], "%Y-%m-%d").date()
+            end_date = datetime.datetime.strptime(data["end_date"], "%Y-%m-%d").date()
+        except Exception as e:
+            return jsonify({"success": False, "errors": {"date": "Invalid date format"}}), 400
+
+        if end_date < start_date:
+            return jsonify({"success": False, "errors": {"date": "End date cannot be earlier than start date"}}), 400
+
+        # ------------------ GEMINI MODEL ------------------
         gemini_llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             temperature=0.7,
-            google_api_key=google_api_key  # Add this
+            google_api_key=GOOGLE_API_KEY
         )
 
-        data = request.get_json()
-        if current_user.role=="RECRUITER":
-            # Input validation
-            errors = {}
-            if not data.get('job_title'):
-                errors['job_title'] = 'Job title is required.'
-            if not data.get('location'):
-                errors['location'] = 'Job Location is required.'
-            if not data.get('job_type'):
-                errors['job_type'] = 'Job Type is required.'
-            if not data.get('description_keywords'):
-                errors['description_keywords'] = 'Description keywords are required.'
+        prompt = f"""
+Return ONLY clean Markdown text. No JSON. No code blocks.
 
-            if errors:
-                return jsonify({'errors': errors}), 400
+### {data['job_title']} ({data['job_type']})
 
-            # Check if job already exists
-            if Job.query.filter(and_(Job.job_title == data['job_title'], Job.created_by == current_user.user_id)).first():
-                return jsonify({'errors': {'job_title': 'A job with this title already exists.'}}), 400
+Write a 2–3 line introduction.
 
-            job_title = data['job_title']
-            job_type = data['job_type']
-            keywords = data['description_keywords']
+#### 🔹 Key Responsibilities
+- 5–7 bullet points
 
-            # -------------------------------
-            # GEMINI + LANGCHAIN
-            # -------------------------------
-            prompt = f"""
-            Write a professional job description of around 100 words.
-            Details:
-            - Job Title: {job_title}
-            - Job Type: {job_type}
-            - Important Keywords: {keywords}
+#### 🔹 Required Skills & Qualifications
+- 5–7 bullet points
+Include these keywords: {data['description_keywords']}
 
-            Create a clear, attractive, and structured job description suitable for a hiring portal. just give job description which i directly use to store as my description.
-            """
+#### 🔹 Preferred / Nice-to-Have Skills
+- 2–4 bullet points
 
-            ai_response = gemini_llm.invoke(prompt)
-            generated_description = ai_response.content.strip()
+#### 🔹 What You Will Gain
+- 3–4 bullet points
 
-            # -------------------------------
-            # Save Job
-            # -------------------------------
-            job = Job(
-                created_by=current_user.user_id,
-                job_title=job_title,
-                location=data['location'],
-                job_type=job_type,
-                description=generated_description
-            )
+Formatting rules:
+- Markdown only
+- Use headings ### and ####
+- Bullet points "-", "•"
+- No AI mention
+"""
 
-            db.session.add(job)
-            db.session.commit()
+        print("\n Sending prompt to Gemini...\n")
 
-            return jsonify({
-                'message': 'Job created successfully!',
-                'generated_description': generated_description
-            }), 201
-        else:
-            return jsonify({
-                'message': 'Invalid Requiter!',
-            }), 400
+        ai_response = gemini_llm.invoke(prompt)
+
+        # ------------------ CLEAN ANY TYPE OF GEMINI OUTPUT ------------------
+        def extract_text(content):
+            """ Recursively extract pure text from any Gemini output """
+            if content is None:
+                return ""
+
+            if isinstance(content, str):
+                return content
+
+            if isinstance(content, list):
+                return "\n".join(extract_text(item) for item in content)
+
+            if isinstance(content, dict):
+                parts = []
+
+                if "text" in content:
+                    parts.append(content["text"])
+
+                if "value" in content:
+                    parts.append(content["value"])
+
+                if "children" in content:
+                    parts.append(extract_text(content["children"]))
+
+                for k, v in content.items():
+                    if k not in ["text", "value", "children"]:
+                        parts.append(extract_text(v))
+
+                return "\n".join([p for p in parts if p])
+
+            return str(content)
+
+        raw_content = ai_response.content
+
+        generated_description = extract_text(raw_content).strip()
+
+        generated_description = str(generated_description) 
+
+        # ------------------ SAVE JOB ------------------
+        new_job = Job(
+            created_by=current_user.user_id,
+            job_title=data["job_title"],
+            location=data["location"],
+            job_type=data["job_type"],
+            description=generated_description,
+            start_date=start_date,
+            end_date=end_date,
+            status="ACTV"
+        )
+
+        db.session.add(new_job)
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "message": "Job created successfully!",
+            "description": generated_description
+        }), 201
+
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 
 @main.route('/api/job/<int:job_id>', methods=['PUT'])
 @token_required
 def update_job_api(current_user, job_id):
     try:
-        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if current_user.role != "RECRUITER":
+            return jsonify({"success": False, "message": "Invalid recruiter"}), 403
 
-        gemini_llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            temperature=0.7,
-            google_api_key=google_api_key  # Add this
-        )
-        data = request.get_json()
-        if current_user.role=="RECRUITER":
-            # Fetch job by ID
-            job = Job.query.get(job_id)
-            if not job:
-                return jsonify({'error': 'Job not found'}), 404
+        data = request.get_json() or {}
 
-            # Input validation
-            errors = {}
-            if not data.get('job_title'):
-                errors['job_title'] = 'Job title is required.'
-            if not data.get('location'):
-                errors['location'] = 'Job location is required.'
-            if not data.get('job_type'):
-                errors['job_type'] = 'Job type is required.'
-            if not data.get('description_keywords'):
-                errors['description_keywords'] = 'Description is required.'
+        # Required fields
+        required = ["job_title", "location", "job_type", "description", "start_date", "end_date"]
+        errors = {}
 
-            if errors:
-                return jsonify({'errors': errors}), 400
+        for field in required:
+            if not data.get(field):
+                errors[field] = f"{field.replace('_', ' ').title()} is required."
 
-            # Check for duplicate job title (excluding this job)
-            existing_job = Job.query.filter(
-                Job.job_title == data['job_title'],
-                Job.job_id != job_id,
-                Job.created_by==current_user.user_id
-            ).first()
+        if errors:
+            return jsonify({"success": False, "errors": errors}), 422
 
-            if existing_job:
-                return jsonify({'errors': {'job_title': 'A job with this title already exists.'}}), 400
+        # Fetch job
+        job = Job.query.filter_by(job_id=job_id, created_by=current_user.user_id).first()
+        if not job:
+            return jsonify({"success": False, "message": "Job not found"}), 404
 
+        # Convert dates
+        try:
+            start_date = datetime.datetime.strptime(data["start_date"], "%Y-%m-%d").date()
+            end_date = datetime.datetime.strptime(data["end_date"], "%Y-%m-%d").date()
 
-            job_title = data['job_title']
-            job_type = data['job_type']
-            keywords = data['description_keywords']
+            if end_date < start_date:
+                return jsonify({
+                    "success": False,
+                    "errors": {"date": "End date cannot be earlier than start date"}
+                }), 400
 
-            # -------------------------------
-            # GEMINI + LANGCHAIN
-            # -------------------------------
-            prompt = f"""
-            Write a professional job description of around 100 words.
-            Details:
-            - Job Title: {job_title}
-            - Job Type: {job_type}
-            - Important Keywords: {keywords}
+        except:
+            return jsonify({"success": False, "message": "Invalid date format"}), 400
 
-            Create a clear, attractive, and structured job description suitable for a hiring portal. just give job description which i directly use to store as my description.
-            """
+        # Update job
+        job.job_title = data["job_title"]
+        job.location = data["location"]
+        job.job_type = data["job_type"]
+        job.description = normalize_description(data["description"])
+        job.start_date = start_date
+        job.end_date = end_date
 
-            ai_response = gemini_llm.invoke(prompt)
-            generated_description = ai_response.content.strip()
-            # Update job details
-            job.created_by = current_user.user_id
-            job.job_title = data['job_title']
-            job.location = data['location']
-            job.job_type = data['job_type']
-            job.description = generated_description
+        db.session.commit()
 
-            db.session.commit()
+        return jsonify({"success": True, "message": "Job updated successfully"}), 200
 
-            return jsonify({'message': 'Job updated successfully!'}), 200
-        else:
-            return jsonify({
-                'message': 'Invalid Requiter!',
-            }), 400
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 
 
 @main.route('/api/candidate-job-request', methods=['POST'])

@@ -31,7 +31,8 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
 
-    CORS(app, resources={r"/api/*": {"origins": "http://localhost:8080"}})
+    CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
+
 
     from app.routes import main
     app.register_blueprint(main)

@@ -62,4 +62,33 @@ const router = createRouter({
   ],
 });
 
+router.beforeEach((to, from, next) => {
+  const token = localStorage.getItem("token");
+  const role = localStorage.getItem("role");
+
+  // Public pages (no auth needed)
+  const publicPages = ["/", "/login", "/signup", "/about", "/contact", "/jobs"];
+  if (publicPages.includes(to.path)) {
+    return next();
+  }
+
+  // If no token → redirect to login
+  if (!token) {
+    return next("/login");
+  }
+
+  // Role-based access
+  if (to.path.startsWith("/candidate") && role !== "CANDIDATE") {
+    return next("/login");
+  }
+
+  if (to.path.startsWith("/recruiter") && role !== "RECRUITER") {
+    return next("/login");
+  }
+
+  next();
+});
+
+
 export default router;
+
