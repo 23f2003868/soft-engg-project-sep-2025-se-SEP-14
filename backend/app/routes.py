@@ -722,7 +722,16 @@ def create_job_api(current_user):
         except Exception as e:
             return jsonify({"success": False, "errors": {"date": "Invalid date format"}}), 400
 
-        if end_date < start_date:
+        today = datetime.date.today()
+        if start_date < today:
+            print('Start date should be any past dates')
+            return jsonify({"success": False, "errors": {"date": "Start date should be any past dates"}}), 400
+
+        if end_date == start_date:
+            print('End date should not be equal to start date')
+            return jsonify({"success": False, "errors": {"date": "End date should not be equal to start date"}}), 400
+        elif end_date < start_date:
+            print('End date cannot be earlier than start date')
             return jsonify({"success": False, "errors": {"date": "End date cannot be earlier than start date"}}), 400
 
         # ------------------ GEMINI MODEL ------------------
@@ -733,31 +742,31 @@ def create_job_api(current_user):
         )
 
         prompt = f"""
-Return ONLY clean Markdown text. No JSON. No code blocks.
+            Return ONLY clean Markdown text. No JSON. No code blocks.
 
-### {data['job_title']} ({data['job_type']})
+            ### {data['job_title']} ({data['job_type']})
 
-Write a 2–3 line introduction.
+            Write a 2–3 line introduction.
 
-#### 🔹 Key Responsibilities
-- 5–7 bullet points
+            #### 🔹 Key Responsibilities
+            - 5–7 bullet points
 
-#### 🔹 Required Skills & Qualifications
-- 5–7 bullet points
-Include these keywords: {data['description_keywords']}
+            #### 🔹 Required Skills & Qualifications
+            - 5–7 bullet points
+            Include these keywords: {data['description_keywords']}
 
-#### 🔹 Preferred / Nice-to-Have Skills
-- 2–4 bullet points
+            #### 🔹 Preferred / Nice-to-Have Skills
+            - 2–4 bullet points
 
-#### 🔹 What You Will Gain
-- 3–4 bullet points
+            #### 🔹 What You Will Gain
+            - 3–4 bullet points
 
-Formatting rules:
-- Markdown only
-- Use headings ### and ####
-- Bullet points "-", "•"
-- No AI mention
-"""
+            Formatting rules:
+            - Markdown only
+            - Use headings ### and ####
+            - Bullet points "-", "•"
+            - No AI mention
+        """
 
         print("\n Sending prompt to Gemini...\n")
 
