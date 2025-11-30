@@ -214,7 +214,7 @@ GOOGLE_API_KEY=your_key
 >>> flask db migrate -m "initial db"
 >>> flask db upgrade
 ```
-
+flask db init ; flask db migrate -m "initial db" ; flask db upgrade  
 ### 9. Run Backend
 ```bash
 python run.py

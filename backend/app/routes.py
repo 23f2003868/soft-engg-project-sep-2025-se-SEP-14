@@ -1123,3 +1123,63 @@ def get_conversation_history(user_id: int, job_id: int):
         # SystemMessage and ToolMessage are ignored
 
     return jsonify(conversation_history)
+
+
+
+
+
+
+@main.route('/api/credibility-test/<int:job_id>', methods=['GET'])
+@token_required
+def send_questions(current_user,job_id):
+    candidate = Candidate.query.filter_by(user_id=current_user.user_id).first()
+    skills_string = str(candidate.skills)
+    if not skills_string:
+        return "resume not parsed"
+    job_post = Job.query.filter_by(job_id=job_id).first()
+    job_description = job_post.description
+
+    llm = ChatGoogleGenerativeAI(model='gemini-2.5-flash')
+
+    query = f"""
+        You are generating interview screening questions.
+
+        Use these two inputs:
+        - Skills: {skills_string}
+        - Job Description: {job_description}
+
+        Generate EXACTLY 10 YES/NO interview questions:
+        - The FIRST 5 questions MUST come ONLY from the candidate skills.
+        - The NEXT 5 questions MUST come ONLY from the job description.
+        - For each question, also generate the MOST LIKELY correct answer 
+          as either "yes" or "no" ONLY.
+
+        Return the output STRICTLY in this JSON format:
+
+        {{
+            "questions": [
+                {{
+                    "question": "<question text>",
+                    "answer": "<yes or no>"
+                }},
+                ...
+                (10 items total)
+            ]
+        }}
+
+        NO additional text.
+        NO markdown.
+        ONLY valid JSON.
+    """
+
+    response = llm.invoke(query)
+
+    # Gemini content is inside:
+    model_json = response.content
+
+    import json
+    questions_json = json.loads(model_json)
+
+    questions_json["job_id"] = job_id
+
+    return jsonify(questions_json)
