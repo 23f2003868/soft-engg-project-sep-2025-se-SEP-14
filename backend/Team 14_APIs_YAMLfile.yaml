@@ -1,0 +1,1011 @@
+openapi: 3.0.3
+info:
+  title: Recruitment API
+  description: |
+    API documentation for the Recruitment Management System.
+    This API handles user authentication, job management, candidate registration,
+    and job application workflows.
+    
+    External APIs Used:
+    - Google Generative AI (Gemini): Used for AI-powered job description generation
+      - Endpoint: https://generativelanguage.googleapis.com
+      - Authentication: API Key (GOOGLE_API_KEY)
+      - Model: gemini-2.5-flash
+      - Integration: langchain_google_genai.ChatGoogleGenerativeAI
+    
+    - Google Calendar API: Configured for calendar event management (OAuth2)
+      - Endpoint: https://www.googleapis.com/auth/calendar.events
+      - Authentication: OAuth2 (CLIENT_ID, CLIENT_SECRET, REDIRECT_URI)
+      - Scopes: https://www.googleapis.com/auth/calendar.events
+      - Status: Configured but not actively used in visible endpoints
+    
+    - Redis: Used for caching and as Celery message broker
+      - Endpoint: redis://localhost:6379/0
+      - Authentication: None (local)
+      - Usage: Caching and task queue management via Celery
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+
+servers:
+  - url: http://localhost:5000
+    description: Local development server
+  - url: https://api.example.com
+    description: Production server
+
+tags:
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Users
+    description: User profile management
+  - name: Recruiters
+    description: Recruiter registration and management
+  - name: Candidates
+    description: Candidate registration and management
+  - name: Jobs
+    description: Job posting and management
+  - name: Job Requests
+    description: Candidate job application requests
+
+security:
+  - bearerAuth: []
+
+
+paths:
+  /api/chatbot/response:
+    post:
+      tags:
+        - Chatbot
+      summary: Get a response from the chatbot
+      description: Sends a user query related to a job post and receives a response from the AI chatbot.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - job_id
+                - user_id
+                - query
+              properties:
+                job_id:
+                  type: integer
+                  example: 11
+                user_id:
+                  type: integer
+                  example: 1
+                query:
+                  type: string
+                  example: "What are the required skills for this job?"
+      responses:
+        '200':
+          description: Chatbot response successfully returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                    example: "The required skills for this job include Python, Django, and REST APIs."
+        '400':
+          description: Bad request - validation errors
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    additionalProperties:
+                      type: string
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/chatbot/history/:
+    get:
+      tags:
+        - Chatbot
+      summary: Get conversation history
+      description: Retrieves the conversation history for a user and job, filtering only human and AI messages.
+      parameters:
+        - name: user_id
+          in: query
+          description: ID of the user
+          required: true
+          schema:
+            type: integer
+            example: 1
+        - name: job_id
+          in: query
+          description: ID of the job post
+          required: true
+          schema:
+            type: integer
+            example: 11
+      responses:
+        '200':
+          description: Conversation history successfully retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    role:
+                      type: string
+                      example: "human"
+                    content:
+                      type: string
+                      example: "What skills are needed for this job?"
+              examples:
+                conversationHistory:
+                  summary: Example conversation
+                  value:
+                    - role: "human"
+                      content: "What skills are needed for this job?"
+                    - role: "ai"
+                      content: "The required skills for this job include Python, Django, and REST APIs."
+                    - role: "human"
+                      content: "Can you also mention the experience level required?"
+                    - role: "ai"
+                      content: "This position requires 3-5 years of relevant experience."
+        '400':
+          description: Bad request - validation errors
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    additionalProperties:
+                      type: string
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  
+  /api/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user and receive JWT token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  format: password
+                  example: password123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Login successful!
+                  token:
+                    type: string
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  expires_in_minutes:
+                    type: integer
+                    example: 30
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Logout user (client should delete token)
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Logged out successfully. Please delete token on client side.
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/index:
+    post:
+      tags:
+        - Users
+      summary: Get current user information
+      description: Retrieve detailed information about the authenticated user
+      responses:
+        '200':
+          description: User information retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Login successful!
+                  user:
+                    $ref: '#/components/schemas/UserDetail'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/register-recruiter:
+    post:
+      tags:
+        - Recruiters
+      summary: Register a new recruiter
+      description: Create a new recruiter account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - firstname
+                - lastname
+                - email
+                - password
+                - company
+                - position
+                - linkdin_profile_path
+              properties:
+                firstname:
+                  type: string
+                  example: John
+                lastname:
+                  type: string
+                  example: Doe
+                email:
+                  type: string
+                  format: email
+                  example: recruiter@example.com
+                password:
+                  type: string
+                  format: password
+                  example: password123
+                company:
+                  type: string
+                  example: Tech Corp
+                position:
+                  type: string
+                  example: Senior Recruiter
+                linkdin_profile_path:
+                  type: string
+                  example: https://linkedin.com/in/johndoe
+      responses:
+        '200':
+          description: Recruiter registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Recruiter register Successfully.
+        '400':
+          description: Bad request - missing or invalid fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/update-recruiter:
+    post:
+      tags:
+        - Recruiters
+      summary: Update recruiter information
+      description: Update recruiter profile details
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                firstname:
+                  type: string
+                  example: John
+                lastname:
+                  type: string
+                  example: Doe
+                email:
+                  type: string
+                  format: email
+                  example: recruiter@example.com
+                company:
+                  type: string
+                  example: Tech Corp
+                position:
+                  type: string
+                  example: Senior Recruiter
+                linkdin_profile_path:
+                  type: string
+                  example: https://linkedin.com/in/johndoe
+      responses:
+        '200':
+          description: Recruiter updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Recruiter details updated successfully!
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User or recruiter not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/register-candidate:
+    post:
+      tags:
+        - Candidates
+      summary: Register a new candidate
+      description: Create a new candidate account with resume upload
+      security: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - user_data
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Resume file (PDF, PNG, JPG, JPEG, GIF)
+                user_data:
+                  type: string
+                  format: json
+                  example: "{\"firstname\":\"Jane\",\"lastname\":\"Smith\",\"email\":\"candidate@example.com\",\"password\":\"password123\",\"education\":\"Bachelor's Degree\",\"age\":\"25\"}"
+      responses:
+        '200':
+          description: Candidate registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Candidate Register Successfully!
+        '400':
+          description: Bad request - missing file or invalid file type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/update-candidate:
+    post:
+      tags:
+        - Candidates
+      summary: Update candidate information
+      description: Update candidate profile details
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                firstname:
+                  type: string
+                  example: Jane
+                lastname:
+                  type: string
+                  example: Smith
+                email:
+                  type: string
+                  format: email
+                  example: candidate@example.com
+                education:
+                  type: string
+                  example: Master's Degree
+                age:
+                  type: string
+                  example: 27
+      responses:
+        '200':
+          description: Candidate updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Candidate information updated successfully!
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User or candidate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/jobs:
+    get:
+      tags:
+        - Jobs
+      summary: Get all jobs
+      description: Retrieve all jobs created by the authenticated recruiter
+      responses:
+        '200':
+          description: Jobs retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    example: 5
+                  jobs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Job'
+        '400':
+          description: Invalid recruiter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/job:
+    post:
+      tags:
+        - Jobs
+      summary: Create a new job
+      description: Create a new job posting with AI-generated description using Google Gemini
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - job_title
+                - location
+                - job_type
+                - description_keywords
+              properties:
+                job_title:
+                  type: string
+                  example: Software Engineer
+                location:
+                  type: string
+                  example: San Francisco, CA
+                job_type:
+                  type: string
+                  example: Full-time
+                description_keywords:
+                  type: string
+                  example: Python, Django, REST APIs, Microservices
+      responses:
+        '201':
+          description: Job created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Job created successfully!
+                  generated_description:
+                    type: string
+                    example: We are seeking a skilled Software Engineer...
+        '400':
+          description: Bad request - validation errors
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    additionalProperties:
+                      type: string
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/job/{job_id}:
+    put:
+      tags:
+        - Jobs
+      summary: Update a job
+      description: Update an existing job posting with AI-generated description using Google Gemini
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Job ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - job_title
+                - location
+                - job_type
+                - description_keywords
+              properties:
+                job_title:
+                  type: string
+                  example: Senior Software Engineer
+                location:
+                  type: string
+                  example: New York, NY
+                job_type:
+                  type: string
+                  example: Full-time
+                description_keywords:
+                  type: string
+                  example: Python, Django, REST APIs, Microservices, Leadership
+      responses:
+        '200':
+          description: Job updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Job updated successfully!
+        '400':
+          description: Bad request - validation errors
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: object
+                    additionalProperties:
+                      type: string
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/candidate-job-request:
+    post:
+      tags:
+        - Job Requests
+      summary: Create a candidate job request
+      description: Submit a job application request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - job_id
+                - status
+              properties:
+                job_id:
+                  type: integer
+                  example: 1
+                status:
+                  type: string
+                  enum:
+                    - APPLIED
+                    - SHORTLISTED
+                    - INTERVIEWED
+                    - OFFERED
+                    - HIRED
+                    - UNDER_TEST
+                  example: APPLIED
+      responses:
+        '201':
+          description: Job request created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Candidate job request created successfully
+                  id:
+                    type: integer
+                    example: 1
+        '400':
+          description: Bad request - invalid status or missing fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/candidate-job-requests:
+    get:
+      tags:
+        - Job Requests
+      summary: Get candidate job requests
+      description: Retrieve all candidate job requests for the authenticated recruiter
+      responses:
+        '200':
+          description: Job requests retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CandidateJobRequest'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/candidate-job-request/{request_id}:
+    put:
+      tags:
+        - Job Requests
+      summary: Update a candidate job request
+      description: Update job application request status and details
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Candidate job request ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                job_id:
+                  type: integer
+                  example: 1
+                test_score:
+                  type: integer
+                  example: 85
+                interview_scheduled_datetime:
+                  type: string
+                  format: date-time
+                  example: '2024-12-25 14:30:00'
+                status:
+                  type: string
+                  enum:
+                    - APPLIED
+                    - SHORTLISTED
+                    - INTERVIEWED
+                    - OFFERED
+                    - HIRED
+                    - UNDER_TEST
+                  example: SHORTLISTED
+      responses:
+        '200':
+          description: Job request updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Candidate job request updated successfully
+                  id:
+                    type: integer
+                    example: 1
+        '400':
+          description: Bad request - invalid datetime format or status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Job request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from /api/login endpoint
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: An error occurred
+        error:
+          type: string
+          example: Detailed error message
+
+    UserDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          example: '1'
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        role:
+          type: string
+          enum:
+            - CANDIDATE
+            - RECRUITER
+            - ADMIN
+          example: CANDIDATE
+        firstname:
+          type: string
+          example: John
+        lastname:
+          type: string
+          example: Doe
+        status:
+          type: string
+          example: ACTV
+        candidate:
+          type: object
+          nullable: true
+          properties:
+            candidate_id:
+              type: string
+              example: '1'
+            age:
+              type: string
+              example: '25'
+            education:
+              type: string
+              example: Bachelor's Degree
+            resume_file_path:
+              type: string
+              example: C:/resumes/resume_20241225_143000.pdf
+        recruiter:
+          type: object
+          nullable: true
+          properties:
+            recruiter_id:
+              type: string
+              example: '1'
+            company:
+              type: string
+              example: Tech Corp
+            position:
+              type: string
+              example: Senior Recruiter
+            linkdin_profile_path:
+              type: string
+              example: https://linkedin.com/in/johndoe
+
+    Job:
+      type: object
+      properties:
+        job_id:
+          type: integer
+          example: 1
+        job_title:
+          type: string
+          example: Software Engineer
+        location:
+          type: string
+          example: San Francisco, CA
+        job_type:
+          type: string
+          example: Full-time
+        description:
+          type: string
+          example: We are seeking a skilled Software Engineer...
+        status:
+          type: string
+          example: ACTV
+
+    CandidateJobRequest:
+      type: object
+      properties:
+        candidate_job_request_id:
+          type: integer
+          example: 1
+        candidate_id:
+          type: integer
+          example: 1
+        candidate_name:
+          type: string
+          example: Jane Smith
+        job_id:
+          type: integer
+          example: 1
+        job_title:
+          type: string
+          example: Software Engineer
+        test_score:
+          type: integer
+          nullable: true
+          example: 85
+        interview_scheduled_datetime:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2024-12-25 14:30:00'
+        status:
+          type: string
+          enum:
+            - APPLIED
+            - SHORTLISTED
+            - INTERVIEWED
+            - OFFERED
+            - HIRED
+            - UNDER_TEST
+          example: APPLIED
+        status_change_date:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2024-12-25 10:00:00'
+
+externalDocs:
+  description: Google Generative AI Documentation
+  url: https://ai.google.dev/docs
