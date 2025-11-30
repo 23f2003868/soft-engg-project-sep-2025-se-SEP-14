@@ -589,6 +589,18 @@ def register_candidate():
         db.session.add(new_candidate)
         db.session.commit()
 
+        try:
+            from app.utils import parse_pdf, extract_skills_from_resume
+            GOOGLE_API_KEY = GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+            resume_text = parse_pdf(file_path)
+            print(resume_text)
+            skills = extract_skills_from_resume(resume_text, GOOGLE_API_KEY)
+            print(skills)
+            new_candidate.skills = ','.join(skills)
+            db.session.commit()
+        except Exception as e:
+            print(e)
+
         return jsonify({
             "success": True,
             "message": "Candidate registered successfully.",
