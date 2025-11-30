@@ -143,6 +143,7 @@ http://127.0.0.1:5000
 | GET | `/api/jobs` | Get jobs created |
 | POST | `/api/job` | Create job |
 | PUT | `/api/job/<id>` | Update job |
+| DELETE | `/api/job/<id>` | Delete job |
 
 ### 🤖 Chatbot
 | Method | Endpoint | Description |

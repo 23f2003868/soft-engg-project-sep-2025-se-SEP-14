@@ -79,6 +79,11 @@
               <i class="bi bi-briefcase me-1 text-primary"></i> {{ job.job_type }}
             </p>
 
+            <p class="text-muted mb-2">
+              <i class="bi bi-bar-chart-line-fill me-1 text-primary"></i>
+              Experience: {{ job.experience ? job.experience + ' years' : 'Not specified' }}
+            </p>
+
             <p class="text-muted small mb-1">
               <strong>Start:</strong> {{ formatDate(job.start_date) }}
             </p>
@@ -95,9 +100,13 @@
               View Full Description
             </button>
 
-            <div class="d-flex justify-content-between flex-wrap gap-2 mt-3">
+            <div class="d-flex justify-content-around flex-wrap gap-2 mt-3">
               <button class="btn btn-outline-primary btn-sm" @click="openEditJob(job)">
                 <i class="bi bi-pencil-square"></i> Edit
+              </button>
+
+              <button class="btn btn-outline-danger btn-sm" @click="confirmDelete(job)">
+                <i class="bi bi-trash"></i> Delete
               </button>
 
               <button class="btn btn-outline-info btn-sm" @click="viewApplicants(job)">
@@ -162,6 +171,11 @@
                   <option>Part-time</option>
                   <option>Internship</option>
                 </select>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label">Experience (in years)</label>
+                <input v-model="form.experience" type="number" min="0" class="form-control" placeholder="e.g., 2" required />
               </div>
 
               <div class="row">
@@ -241,6 +255,7 @@ const form = ref({
   location: "",
   job_type: "",
   description_keywords: "",
+  experience: "",
   start_date: "",
   end_date: "",
   description: "",
@@ -361,6 +376,7 @@ const openAddJobModal = () => {
     location: "",
     job_type: "",
     description_keywords: "",
+    experience: "",
     start_date: "",
     end_date: "",
     description: "",
@@ -375,6 +391,7 @@ const openEditJob = (job) => {
     location: job.location,
     job_type: job.job_type,
     description_keywords: "",
+    experience: job.experience !== undefined ? job.experience : "",
     start_date: formatDate(job.start_date),
     end_date: formatDate(job.end_date),
     description: job.description || "",
@@ -395,11 +412,13 @@ const saveJob = async () => {
         start_date: form.value.start_date,
         end_date: form.value.end_date,
         description: form.value.description,
+        experience: form.value.experience
       }
     : {
         job_title: form.value.job_title,
         location: form.value.location,
         job_type: form.value.job_type,
+        experience: form.value.experience,
         start_date: form.value.start_date,
         end_date: form.value.end_date,
         description_keywords: form.value.description_keywords,
@@ -439,6 +458,43 @@ const saveJob = async () => {
 const viewApplicants = () => {
   Swal.fire("Coming Soon", "Applicant list feature is coming soon!", "info");
 };
+
+const confirmDelete = (job) => {
+  Swal.fire({
+    title: "Delete Job?",
+    text: `Are you sure you want to delete "${job.job_title}"?`,
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Delete",
+    cancelButtonText: "Cancel",
+  }).then((result) => {
+    if (result.isConfirmed) deleteJob(job.job_id);
+  });
+};
+
+const deleteJob = async (id) => {
+  try {
+    const res = await fetch(`${API_BASE}/job/${id}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      Swal.fire("Error", data.message || "Delete failed", "error");
+      return;
+    }
+
+    Swal.fire("Deleted", "Job removed successfully.", "success");
+    await loadJobs();
+  } catch (err) {
+    Swal.fire("Error", "Server error", "error");
+  }
+};
+
 
 onMounted(() => {
   jobModalInstance = new Modal(jobModalRef.value);

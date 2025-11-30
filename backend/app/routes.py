@@ -451,6 +451,7 @@ def get_jobs(current_user):
                     "job_title": job.job_title,
                     "location": job.location,
                     "job_type": job.job_type,
+                    "experience": job.experience,
                     "description": normalize_description(job.description),
                     "start_date": str(job.start_date),
                     "end_date": str(job.end_date),
@@ -685,8 +686,6 @@ def allowed_file(filename):
 @token_required
 def create_job_api(current_user):
     try:
-        print("➡️ API HIT: /api/job (Create Job)")
-
         GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
         if not GOOGLE_API_KEY:
             return jsonify({"success": False, "error": "GOOGLE_API_KEY not found"}), 500
@@ -698,11 +697,23 @@ def create_job_api(current_user):
         data = request.get_json() or {}
 
         # ------------------ VALIDATION ------------------
-        required = ["job_title", "location", "job_type", "description_keywords", "start_date", "end_date"]
+        required = ["job_title", "location", "job_type", "description_keywords", "experience", "start_date", "end_date"]
         errors = {f: f"{f.replace('_', ' ').title()} is required." for f in required if not data.get(f)}
 
         if errors:
             return jsonify({"success": False, "errors": errors}), 422
+
+        experience = data.get("experience", None)
+
+        # Validate experience if provided
+        if experience is not None:
+            try:
+                experience = int(experience)
+                if experience < 0:
+                    return jsonify({"success": False, "errors": {"experience": "Experience cannot be negative"}}), 400
+            except:
+                return jsonify({"success": False, "errors": {"experience": "Experience must be a number"}}), 400
+
 
         # ------------------ DATE PARSING ------------------
         try:
@@ -799,6 +810,7 @@ Formatting rules:
             description=generated_description,
             start_date=start_date,
             end_date=end_date,
+            experience=experience,
             status="ACTV"
         )
 
@@ -827,7 +839,7 @@ def update_job_api(current_user, job_id):
         data = request.get_json() or {}
 
         # Required fields
-        required = ["job_title", "location", "job_type", "description", "start_date", "end_date"]
+        required = ["job_title", "location", "job_type", "description", "experience", "start_date", "end_date"]
         errors = {}
 
         for field in required:
@@ -841,6 +853,15 @@ def update_job_api(current_user, job_id):
         job = Job.query.filter_by(job_id=job_id, created_by=current_user.user_id).first()
         if not job:
             return jsonify({"success": False, "message": "Job not found"}), 404
+
+        experience = data.get("experience")
+        try:
+            experience = int(experience)
+            if experience < 0:
+                return jsonify({"success": False, "errors": {"experience": "Experience cannot be negative"}}), 400
+        except:
+            return jsonify({"success": False, "errors": {"experience": "Experience must be a number"}}), 400
+
 
         # Convert dates
         try:
@@ -861,6 +882,7 @@ def update_job_api(current_user, job_id):
         job.location = data["location"]
         job.job_type = data["job_type"]
         job.description = normalize_description(data["description"])
+        job.experience = experience
         job.start_date = start_date
         job.end_date = end_date
 
@@ -872,6 +894,34 @@ def update_job_api(current_user, job_id):
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
 
+
+@main.route('/api/job/<int:job_id>', methods=['DELETE'])
+@token_required
+def delete_job_api(current_user, job_id):
+    """
+    Delete a job created by the logged-in recruiter.
+    Only the owner can delete the job.
+    """
+
+    try:
+        # Only recruiters allowed
+        if current_user.role != "RECRUITER":
+            return jsonify({"success": False, "message": "Only recruiters can delete jobs."}), 403
+
+        # Find job created by this recruiter
+        job = Job.query.filter_by(job_id=job_id, created_by=current_user.user_id).first()
+        if not job:
+            return jsonify({"success": False, "message": "Job not found or not owned by you."}), 404
+
+        # Delete job
+        db.session.delete(job)
+        db.session.commit()
+
+        return jsonify({"success": True, "message": "Job deleted successfully."}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": "Server error", "error": str(e)}), 500
 
 
 

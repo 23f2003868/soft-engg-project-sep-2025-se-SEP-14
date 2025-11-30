@@ -74,6 +74,7 @@ Below is a complete list of routes and their corresponding components.
 | GET | `/api/jobs` | Get jobs created |
 | POST | `/api/job` | Create job |
 | PUT | `/api/job/<id>` | Update job |
+| DELETE | `/api/job/<id>` | Delete job |
 
 ### 🤖 Chatbot
 | Method | Endpoint | Description |
@@ -191,7 +192,7 @@ npm run dev
 ```bash
 cd backend
 python -m venv venv
-venv/Scripts/activate   (Windows)
+venv\Scripts\Activate  (Windows)
 source venv/bin/activate (Linux/Mac)
 ```
 
