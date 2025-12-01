@@ -589,6 +589,18 @@ def register_candidate():
         db.session.add(new_candidate)
         db.session.commit()
 
+        try:
+            from app.utils import parse_pdf, extract_skills_from_resume
+            GOOGLE_API_KEY = GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+            resume_text = parse_pdf(file_path)
+            print(resume_text)
+            skills = extract_skills_from_resume(resume_text, GOOGLE_API_KEY)
+            print(skills)
+            new_candidate.skills = ','.join(skills)
+            db.session.commit()
+        except Exception as e:
+            print(e)
+
         return jsonify({
             "success": True,
             "message": "Candidate registered successfully.",
@@ -1111,3 +1123,110 @@ def get_conversation_history(user_id: int, job_id: int):
         # SystemMessage and ToolMessage are ignored
 
     return jsonify(conversation_history)
+
+
+
+
+
+
+@main.route('/api/credibility-test/<int:job_id>', methods=['GET'])
+@token_required
+def send_questions(current_user,job_id):
+    candidate = Candidate.query.filter_by(user_id=current_user.user_id).first()
+    skills_string = str(candidate.skills)
+    if not skills_string:
+        return "resume not parsed"
+    job_post = Job.query.filter_by(job_id=job_id).first()
+    job_description = job_post.description
+
+    llm = ChatGoogleGenerativeAI(model='gemini-2.5-flash')
+
+    query = f"""
+    You are generating interview screening questions.
+
+    Use these two inputs:
+    - Skills: {skills_string}
+    - Job Description: {job_description}
+
+    Generate EXACTLY 10 multiple-choice interview questions:
+    - The FIRST 5 MCQs MUST come ONLY from the candidate skills.
+    - The NEXT 5 MCQs MUST come ONLY from the job description.
+    - EACH question must have:
+        - EXACTLY 4 options labeled "A", "B", "C", "D".
+        - EXACTLY ONE correct option.
+        - A field "correct_option" containing ONLY the letter of the correct answer (A/B/C/D).
+
+    Return the output STRICTLY in this JSON format:
+
+    {{
+        "questions": [
+            {{
+                "question": "<question text>",
+                "options": {{
+                    "A": "<option text>",
+                    "B": "<option text>",
+                    "C": "<option text>",
+                    "D": "<option text>"
+                }},
+                "correct_option": "<A/B/C/D>"
+            }},
+            ...
+            (10 items total)
+        ]
+    }}
+
+    NO additional text.
+    NO markdown.
+    ONLY valid JSON.
+"""
+
+
+    response = llm.invoke(query)
+
+    # Gemini content is inside:
+    model_json = response.content
+
+    import json
+    questions_json = json.loads(model_json)
+
+    questions_json["job_id"] = job_id
+
+    return jsonify(questions_json)
+
+
+
+@main.route('/api/credibility-test/<int:job_id>', methods=['POST'])
+@token_required
+def submit_test(current_user, job_id):
+    data = request.get_json()
+
+    if not data or "score" not in data:
+        return jsonify({"error": "score is required"}), 400
+
+    score = data.get("score")
+
+    # Find candidate-job relation
+    cjr = CandidateJobRequest.query.filter_by(
+        candidate_id=current_user.user_id,
+        job_id=job_id
+    ).first()
+
+    if not cjr:
+        return jsonify({"error": "candidate-job relation not found"}), 404
+
+    # Update the test score
+    cjr.test_score = score
+    cjr.status_change_date = datetime.utcnow()
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "database error", "details": str(e)}), 500
+
+    return jsonify({
+        "message": "test score submitted successfully",
+        "job_id": job_id,
+        "candidate_id": current_user.user_id,
+        "score": score
+    }), 200

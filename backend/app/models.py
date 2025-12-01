@@ -67,6 +67,7 @@ class Candidate(db.Model):
     resume_file_path = db.Column(db.String(100), nullable=False)
     status = db.Column(db.String(10), nullable=False, default='ACTV')
     status_change_date = db.Column(db.DateTime, default=datetime.utcnow)
+    skills = db.Column(db.Text)
 
     def to_dict(self):
         return {
