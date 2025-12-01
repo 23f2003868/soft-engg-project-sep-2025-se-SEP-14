@@ -1142,35 +1142,44 @@ def send_questions(current_user,job_id):
     llm = ChatGoogleGenerativeAI(model='gemini-2.5-flash')
 
     query = f"""
-        You are generating interview screening questions.
+    You are generating interview screening questions.
 
-        Use these two inputs:
-        - Skills: {skills_string}
-        - Job Description: {job_description}
+    Use these two inputs:
+    - Skills: {skills_string}
+    - Job Description: {job_description}
 
-        Generate EXACTLY 10 YES/NO interview questions:
-        - The FIRST 5 questions MUST come ONLY from the candidate skills.
-        - The NEXT 5 questions MUST come ONLY from the job description.
-        - For each question, also generate the MOST LIKELY correct answer 
-          as either "yes" or "no" ONLY.
+    Generate EXACTLY 10 multiple-choice interview questions:
+    - The FIRST 5 MCQs MUST come ONLY from the candidate skills.
+    - The NEXT 5 MCQs MUST come ONLY from the job description.
+    - EACH question must have:
+        - EXACTLY 4 options labeled "A", "B", "C", "D".
+        - EXACTLY ONE correct option.
+        - A field "correct_option" containing ONLY the letter of the correct answer (A/B/C/D).
 
-        Return the output STRICTLY in this JSON format:
+    Return the output STRICTLY in this JSON format:
 
-        {{
-            "questions": [
-                {{
-                    "question": "<question text>",
-                    "answer": "<yes or no>"
+    {{
+        "questions": [
+            {{
+                "question": "<question text>",
+                "options": {{
+                    "A": "<option text>",
+                    "B": "<option text>",
+                    "C": "<option text>",
+                    "D": "<option text>"
                 }},
-                ...
-                (10 items total)
-            ]
-        }}
+                "correct_option": "<A/B/C/D>"
+            }},
+            ...
+            (10 items total)
+        ]
+    }}
 
-        NO additional text.
-        NO markdown.
-        ONLY valid JSON.
-    """
+    NO additional text.
+    NO markdown.
+    ONLY valid JSON.
+"""
+
 
     response = llm.invoke(query)
 
@@ -1183,3 +1192,41 @@ def send_questions(current_user,job_id):
     questions_json["job_id"] = job_id
 
     return jsonify(questions_json)
+
+
+
+@main.route('/api/credibility-test/<int:job_id>', methods=['POST'])
+@token_required
+def submit_test(current_user, job_id):
+    data = request.get_json()
+
+    if not data or "score" not in data:
+        return jsonify({"error": "score is required"}), 400
+
+    score = data.get("score")
+
+    # Find candidate-job relation
+    cjr = CandidateJobRequest.query.filter_by(
+        candidate_id=current_user.user_id,
+        job_id=job_id
+    ).first()
+
+    if not cjr:
+        return jsonify({"error": "candidate-job relation not found"}), 404
+
+    # Update the test score
+    cjr.test_score = score
+    cjr.status_change_date = datetime.utcnow()
+
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "database error", "details": str(e)}), 500
+
+    return jsonify({
+        "message": "test score submitted successfully",
+        "job_id": job_id,
+        "candidate_id": current_user.user_id,
+        "score": score
+    }), 200
