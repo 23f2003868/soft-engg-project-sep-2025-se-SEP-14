@@ -59,6 +59,11 @@ const router = createRouter({
       name: 'candidate-profile',
       component: () => import('../views/CandidateProfile.vue')
     },
+    {
+      path: '/candidate/saved',
+      name: 'candidate-saved-jobs',
+      component: () => import('../views/SavedJobs.vue'),
+    },
   ],
 });
 

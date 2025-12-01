@@ -21,7 +21,7 @@ from app.forms import (
     RegisterAdminForm, RegisterCandidateForm,
     RegisterRecruiterForm, CreateJobForm
 )
-from app.models import CandidateJobRequest, Job, Recruiter, Candidate, User,Conversation
+from app.models import CandidateJobRequest, Job, Recruiter, Candidate, User,Conversation, SavedJob
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from dotenv import load_dotenv
@@ -692,6 +692,129 @@ def allowed_file(filename):
     """
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf'}
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+@main.route('/api/jobs-all', methods=['GET'])
+@token_required
+def get_all_jobs(current_user):
+    try:
+        jobs_data = Job.query.filter_by(status="ACTV").all()
+
+        jobs = []
+        for job in jobs_data:
+            recruiter = User.query.get(job.created_by)
+            jobs.append({
+                "job_id": job.job_id,
+                "job_title": job.job_title,
+                "company": job.job_title,
+                "location": job.location,
+                "job_type": job.job_type,
+                "experience": job.experience,
+                "description": normalize_description(job.description),
+                "start_date": str(job.start_date),
+                "end_date": str(job.end_date),
+            })
+
+        return jsonify({"success": True, "jobs": jobs}), 200
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+
+@main.route('/api/candidate-job-requests', methods=['GET'])
+@token_required
+def get_my_job_requests(current_user):
+
+    results = db.session.query(
+        CandidateJobRequest,
+        Job
+    ).join(Job, CandidateJobRequest.job_id == Job.job_id)\
+     .filter(CandidateJobRequest.candidate_id == current_user.user_id).all()
+
+    data = []
+    for req, job in results:
+        data.append({
+            "request_id": req.candidate_job_request_id,
+            "job_id": job.job_id,
+            "job_title": job.job_title,
+            "company": User.query.get(job.created_by).firstname,
+            "location": job.location,
+            "status": req.status,
+            "test_score": req.test_score,
+            "interview_scheduled_datetime": req.interview_scheduled_datetime,
+            "experience": job.experience,
+            "description": normalize_description(job.description),
+            "skills": [] # optional
+        })
+
+    return jsonify({"success": True, "applications": data}), 200
+
+
+@main.route('/api/save-job', methods=['POST'])
+@token_required
+def save_job(current_user):
+    if current_user.role != "CANDIDATE":
+        return jsonify({"success": False, "message": "Only candidates can save jobs"}), 403
+
+    data = request.get_json() or {}
+    job_id = data.get("job_id")
+
+    if not job_id:
+        return jsonify({"success": False, "message": "job_id is required"}), 400
+
+    # Check duplicate
+    existing = SavedJob.query.filter_by(candidate_id=current_user.user_id, job_id=job_id).first()
+    if existing:
+        return jsonify({"success": True, "message": "Already saved"}), 200
+
+    new_save = SavedJob(candidate_id=current_user.user_id, job_id=job_id)
+    db.session.add(new_save)
+    db.session.commit()
+
+    return jsonify({"success": True, "message": "Job saved successfully"}), 201
+
+
+@main.route('/api/save-job/<int:job_id>', methods=['DELETE'])
+@token_required
+def delete_saved_job(current_user, job_id):
+    if current_user.role != "CANDIDATE":
+        return jsonify({"success": False, "message": "Only candidates can remove saved jobs"}), 403
+
+    saved = SavedJob.query.filter_by(candidate_id=current_user.user_id, job_id=job_id).first()
+    if not saved:
+        return jsonify({"success": False, "message": "Saved job entry not found"}), 404
+
+    db.session.delete(saved)
+    db.session.commit()
+
+    return jsonify({"success": True, "message": "Removed from saved jobs"}), 200
+
+
+@main.route('/api/saved-jobs-details', methods=['GET'])
+@token_required
+def saved_jobs_details(current_user):
+    try:
+        user_id = current_user.user_id
+
+        saved_entries = SavedJob.query.filter_by(candidate_id=user_id).all()
+        job_ids = [entry.job_id for entry in saved_entries]
+
+        if not job_ids:
+            return jsonify({"success": True, "jobs": []})
+
+        jobs = Job.query.filter(Job.job_id.in_(job_ids)).all()
+
+        return jsonify({
+            "success": True,
+            "jobs": [job.to_dict() for job in jobs]
+        })
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+
 
 
 @main.route('/api/job', methods=['POST'])
