@@ -2,8 +2,7 @@
   <div class="d-flex">
     <div class="flex-grow-1">
       <Topbar />
-
-      <main class="p-4">
+      <main>
         <JobsTable />
       </main>
     </div>

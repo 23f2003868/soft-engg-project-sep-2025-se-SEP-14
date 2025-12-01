@@ -21,35 +21,55 @@
       <!-- Nav Links -->
       <div class="collapse navbar-collapse" id="candidateNav">
         <ul class="navbar-nav mx-auto text-center">
+
+          <!-- DASHBOARD -->
           <li class="nav-item">
             <router-link to="/candidate" class="nav-link" active-class="active">
               <i class="bi bi-speedometer2 me-2"></i> Dashboard
             </router-link>
           </li>
 
+          <!-- APPLIED JOBS -->
+          <li class="nav-item">
+            <router-link to="/candidate/applied" class="nav-link" active-class="active">
+              <i class="bi bi-clipboard-check me-2"></i> Applied Jobs
+            </router-link>
+          </li>
+
+          <!-- SAVED JOBS -->
+          <li class="nav-item">
+            <router-link to="/candidate/saved" class="nav-link" active-class="active">
+              <i class="bi bi-heart me-2"></i> Saved Jobs
+            </router-link>
+          </li>
+
+          <!-- PROFILE -->
           <li class="nav-item">
             <router-link to="/candidate/profile" class="nav-link" active-class="active">
               <i class="bi bi-person me-2"></i> Profile
             </router-link>
           </li>
+
         </ul>
 
         <!-- Icons / Right Side -->
         <div class="d-flex align-items-center justify-content-center justify-content-lg-end gap-3 mt-3 mt-lg-0">
-  <i class="bi bi-bell fs-5 text-primary position-relative notification-icon">
-    <span class="badge bg-danger position-absolute top-0 start-100 translate-middle p-1 border border-light rounded-circle"></span>
-  </i>
 
-  <!-- Simple Logout Button -->
-  <button
-    class="btn btn-outline-danger btn-sm"
-    type="button"
-    @click="logout"
-  >
-    <i class="bi bi-box-arrow-right me-1"></i>
-    Logout
-  </button>
-</div>
+          <i class="bi bi-bell fs-5 text-primary position-relative notification-icon">
+            <span class="badge bg-danger position-absolute top-0 start-100 translate-middle p-1 border border-light rounded-circle"></span>
+          </i>
+
+          <!-- Logout -->
+          <button
+            class="btn btn-outline-danger btn-sm"
+            type="button"
+            @click="logout"
+          >
+            <i class="bi bi-box-arrow-right me-1"></i>
+            Logout
+          </button>
+
+        </div>
       </div>
     </div>
   </nav>
@@ -57,9 +77,9 @@
 
 <script setup>
 import { useRouter } from "vue-router";
-const router = useRouter();
-
 import Swal from "sweetalert2";
+
+const router = useRouter();
 
 const logout = () => {
   localStorage.removeItem("token");
@@ -125,7 +145,6 @@ const logout = () => {
   }
 }
 
-/* Space between items for large screens */
 @media (min-width: 992px) {
   .navbar-nav .nav-item + .nav-item {
     margin-left: 20px;

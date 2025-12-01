@@ -91,6 +91,21 @@ class Job(db.Model):
     end_date = db.Column(db.Date, nullable=False)
     status = db.Column(db.String(10), nullable=False, default='ACTV')
 
+    
+    def to_dict(self):
+        return {
+            "job_id": self.job_id,
+            "created_by": self.created_by,
+            "job_title": self.job_title,
+            "location": self.location,
+            "job_type": self.job_type,
+            "description": self.description,
+            "start_date": str(self.start_date),
+            "end_date": str(self.end_date),
+            "experience": self.experience,
+            "status": self.status
+        }
+
 
 class CandidateJobRequest(db.Model):
     candidate_job_request_id = db.Column(db.Integer, primary_key=True)
@@ -100,6 +115,16 @@ class CandidateJobRequest(db.Model):
     interview_scheduled_datetime = db.Column(db.DateTime,nullable=True)
     status = db.Column(db.String(100), nullable=False, default='ACTV')
     status_change_date = db.Column(db.DateTime, default=datetime.utcnow)
+
+class SavedJob(db.Model):
+    __tablename__ = "saved_jobs"
+
+    saved_job_id = db.Column(db.Integer, primary_key=True)
+    candidate_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+    job_id = db.Column(db.Integer, db.ForeignKey("job.job_id"), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 
 class Conversation(db.Model):
     __tablename__ = 'conversations'
