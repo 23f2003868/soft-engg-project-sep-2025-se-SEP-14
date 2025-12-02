@@ -1,6 +1,23 @@
 <template>
   <Navbar />
 
+  <!-- Toast Container -->
+  <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 9999;">
+    <div
+      v-for="toast in toasts"
+      :key="toast.id"
+      class="glass-toast shadow-sm mb-2"
+      :class="toast.type"
+    >
+      <div class="toast-icon">
+        <i :class="toast.icon"></i>
+      </div>
+      <div class="toast-body">
+        {{ toast.message }}
+      </div>
+    </div>
+  </div>
+
   <section class="profile-section py-5">
     <div class="container">
       <div class="text-center mb-4 fade-in">
@@ -111,11 +128,13 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import Navbar from "../components/CandidateNavbar.vue";
-import Swal from "sweetalert2";
 
-const API_URL = "http://127.0.0.1:5000";
+const API_URL = "http://127.0.0.1:5000/api";
 const token = localStorage.getItem("token");
 
+// ----------------------
+// Profile State
+// ----------------------
 const profile = ref({
   firstname: "",
   lastname: "",
@@ -128,10 +147,38 @@ const profile = ref({
 const selectedResumeFile = ref(null);
 const isSaving = ref(false);
 
-// Load candidate profile
+// ----------------------
+// Toast System
+// ----------------------
+const toasts = ref([]);
+
+const toastSound = new Audio("/sounds/notify.mp3");
+
+function showToast(message, type = "info") {
+  const id = Date.now();
+  const icon =
+    type === "success"
+      ? "bi bi-check-circle-fill text-success"
+      : type === "error"
+      ? "bi bi-x-circle-fill text-danger"
+      : "bi bi-info-circle-fill text-primary";
+
+  toasts.value.push({ id, message, type, icon });
+
+  toastSound.currentTime = 0;
+  toastSound.play();
+
+  setTimeout(() => {
+    toasts.value = toasts.value.filter((t) => t.id !== id);
+  }, 4200);
+}
+
+// ----------------------
+// Load Profile
+// ----------------------
 onMounted(async () => {
   try {
-    const res = await fetch(`${API_URL}/api/index`, {
+    const res = await fetch(`${API_URL}/index`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -150,17 +197,25 @@ onMounted(async () => {
         user.candidate.resume_file_path?.split("\\").pop() || "";
     }
   } catch (err) {
-    console.error("Failed to load profile", err);
+    showToast("Failed to load profile", "error");
   }
 });
 
-const handleFileUpload = (e) => {
+// ----------------------
+// File Upload Handler
+// ----------------------
+function handleFileUpload(e) {
   selectedResumeFile.value = e.target.files[0];
-};
+}
 
-const saveProfile = async () => {
+// ----------------------
+// SAVE PROFILE
+// Includes triggering resume parsing
+// ----------------------
+async function saveProfile() {
   if (profile.value.age < 18) {
-    return Swal.fire("Invalid Age", "Age must be at least 18", "error");
+    showToast("Age must be at least 18", "error");
+    return;
   }
 
   isSaving.value = true;
@@ -168,46 +223,176 @@ const saveProfile = async () => {
   try {
     const formData = new FormData();
 
-    const userData = {
+    formData.append("user_data", JSON.stringify({
       firstname: profile.value.firstname,
       lastname: profile.value.lastname,
       email: profile.value.email,
       education: profile.value.education,
       age: profile.value.age,
-    };
-
-    formData.append("user_data", JSON.stringify(userData));
+    }));
 
     if (selectedResumeFile.value) {
       formData.append("file", selectedResumeFile.value);
     }
 
-    const res = await fetch(`${API_URL}/api/update-candidate`, {
+    const res = await fetch(`${API_URL}/update-candidate`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
 
     const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Update failed");
 
-    if (!res.ok) throw new Error(data.error);
+    showToast("Profile updated", "success");
+    localStorage.setItem("firstname", profile.value.firstname);
+    // ------------------------------
+    // NEW — RESUME PARSING STARTED
+    // ------------------------------
+    if (data.parsing_started) {
+      showToast("New resume uploaded. Parsing started...", "info");
 
-    Swal.fire({
-      icon: "success",
-      title: "Profile Updated",
-      text: "Your candidate profile was updated successfully!",
-      timer: 2000,
-      showConfirmButton: false,
-    });
+      setTimeout(checkParsingResult, 2000);
+    }
+
   } catch (err) {
-    Swal.fire("Error", err.message, "error");
+    showToast(err.message, "error");
   }
 
   isSaving.value = false;
-};
+}
+
+
+async function checkParsingResult() {
+  try {
+    const res = await fetch(`${API_URL}/resume-status`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const data = await res.json();
+    const status = data.status;
+
+    if (status === "SUCCESS") {
+      showToast("Resume parsed successfully!", "success");
+      return;
+    }
+
+    if (status === "FAILED") {
+      showToast("Resume parsing failed", "error");
+      return;
+    }
+
+    // If still PENDING or PROCESSING → wait & check again
+    setTimeout(checkParsingResult, 2000);
+
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+
+// ----------------------
+// CHECK PARSING STATUS ONCE
+// ----------------------
+async function checkParsingStatusOnce() {
+  try {
+    const res = await fetch(`${API_URL}/resume-status`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const data = await res.json();
+    const status = data.status?.toUpperCase();
+
+    if (status === "SUCCESS") {
+      showToast("Resume parsed successfully!", "success");
+    } else if (status === "FAILED") {
+      showToast("Resume parsing failed", "error");
+      showRetryPopup();
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// ----------------------
+// RETRY POPUP
+// ----------------------
+function showRetryPopup() {
+  const retry = confirm("Resume parsing failed. Retry?");
+  if (retry) retryParsing();
+}
+
+// Retry request
+async function retryParsing() {
+  try {
+    const res = await fetch(`${API_URL}/resume-retry`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      showToast("Retry started", "info");
+      setTimeout(checkParsingStatusOnce, 1500);
+    }
+  } catch (err) {
+    showToast("Retry failed", "error");
+  }
+}
 </script>
 
 <style scoped>
+/* Glass Toast */
+.glass-toast {
+  display: flex;
+  align-items: center;
+  min-width: 260px;
+  padding: 12px 15px;
+  border-radius: 14px;
+  backdrop-filter: blur(14px);
+  background: rgba(255, 255, 255, 0.8);
+  animation: fadeSlide 0.45s ease;
+}
+
+.glass-toast .toast-icon {
+  font-size: 1.4rem;
+  margin-right: 10px;
+}
+
+.glass-toast.success {
+  border-left: 5px solid #28a745;
+}
+.glass-toast.error {
+  border-left: 5px solid #dc3545;
+}
+.glass-toast.info {
+  border-left: 5px solid #0d6efd;
+}
+
+.btn-gradient {
+  background: linear-gradient(90deg, #913ee3ff, #c33dd4ff);
+  color: white;
+  border: none;
+}
+
+.btn-gradient:hover {
+  background: linear-gradient(90deg, #7f00ff, #e100ff);
+  box-shadow: 0 4px 14px rgba(126, 0, 255, 0.3);
+}
+
+
+@keyframes fadeSlide {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 /* Background */
 .profile-section {
   background: linear-gradient(120deg, #eef4ff, #e6f0ff);
@@ -219,58 +404,11 @@ const saveProfile = async () => {
   backdrop-filter: blur(12px);
   border-radius: 1.25rem;
   border: 1px solid rgba(255, 255, 255, 0.5);
-  transition: 0.3s ease;
 }
 
-.profile-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 10px 25px rgba(0, 114, 255, 0.15);
-}
-
-/* Floating Labels */
-.form-floating > label {
-  padding-left: 12px;
-}
-
-.form-control {
-  height: 48px;
-  border-radius: 12px !important;
-  border: 1.5px solid #d4d9e1;
-  background: rgba(255, 255, 255, 0.9);
-  transition: all 0.25s ease;
-}
-
-.form-control:focus {
-  border-color: #0072ff;
-  box-shadow: 0 0 0 0.15rem rgba(0, 114, 255, 0.15);
-}
-
-/* Title Gradient */
 .text-gradient {
   background: linear-gradient(90deg, #00c6ff, #0072ff);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-}
-
-/* Gradient Button */
-.btn-gradient {
-  background: linear-gradient(90deg, #00c6ff, #0072ff);
-  color: white;
-  border: none;
-}
-
-.btn-gradient:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 14px rgba(0, 114, 255, 0.25);
-}
-
-/* Fade In */
-.fade-in {
-  animation: fadeIn 0.8s ease forwards;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 </style>

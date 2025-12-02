@@ -1,3 +1,4 @@
+// src/router/index.js
 import { createRouter, createWebHistory } from 'vue-router';
 import HomeView from '../views/HomeView.vue';
 
@@ -47,7 +48,7 @@ const router = createRouter({
     {
       path: '/recruiter/tracker',
       name: 'SmartCandidateTracker',
-      component: () => import('../views/SmartCandidateTracker.vue')
+      component: () => import('../views/SmartCandidateTracker.vue'),
     },
     {
       path: '/candidate',
@@ -57,43 +58,48 @@ const router = createRouter({
     {
       path: '/candidate/profile',
       name: 'candidate-profile',
-      component: () => import('../views/CandidateProfile.vue')
+      component: () => import('../views/CandidateProfile.vue'),
     },
     {
       path: '/candidate/saved',
       name: 'candidate-saved-jobs',
       component: () => import('../views/SavedJobs.vue'),
     },
+    // ENABLED: applied jobs view (single file view you asked for earlier)
+    {
+      path: '/candidate/applied/:id?',
+      name: 'candidate-applied-jobs',
+      component: () => import('../views/AppliedJobs.vue'),
+      // :id? is optional — useful later for deep-linking to an application
+    },
   ],
 });
 
 router.beforeEach((to, from, next) => {
-  const token = localStorage.getItem("token");
-  const role = localStorage.getItem("role");
+  const token = localStorage.getItem('token');
+  const role = localStorage.getItem('role');
 
-  // Public pages (no auth needed)
-  const publicPages = ["/", "/login", "/signup", "/about", "/contact", "/jobs"];
-  if (publicPages.includes(to.path)) {
+  // Public pages (no auth needed) — use a Set for membership checks
+  const publicPages = new Set(['/', '/login', '/signup', '/about', '/contact', '/jobs']);
+
+  if (publicPages.has(to.path)) {
     return next();
   }
 
-  // If no token → redirect to login
   if (!token) {
-    return next("/login");
+    return next('/login');
   }
 
   // Role-based access
-  if (to.path.startsWith("/candidate") && role !== "CANDIDATE") {
-    return next("/login");
+  if (to.path.startsWith('/candidate') && role !== 'CANDIDATE') {
+    return next('/login');
   }
 
-  if (to.path.startsWith("/recruiter") && role !== "RECRUITER") {
-    return next("/login");
+  if (to.path.startsWith('/recruiter') && role !== 'RECRUITER') {
+    return next('/login');
   }
 
   next();
 });
 
-
 export default router;
-

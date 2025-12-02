@@ -67,7 +67,9 @@ class Candidate(db.Model):
     resume_file_path = db.Column(db.String(100), nullable=False)
     status = db.Column(db.String(10), nullable=False, default='ACTV')
     status_change_date = db.Column(db.DateTime, default=datetime.utcnow)
-    skills = db.Column(db.Text)
+    resume_parse_status = db.Column(db.String(20), default="PENDING")
+    resume_parse_error = db.Column(db.Text, nullable=True)           
+    skills = db.Column(db.Text, nullable=True)
 
     def to_dict(self):
         return {
@@ -76,6 +78,7 @@ class Candidate(db.Model):
             'age': self.age,
             'education': self.education,
             'resume_file_path': self.resume_file_path,
+            "skills": self.skills.split(",") if self.skills else [],
             'status': self.status,
             'status_change_date': self.status_change_date.strftime('%Y-%m-%d %H:%M:%S') if self.status_change_date else None
         }

@@ -11,15 +11,21 @@ def parse_pdf(filepath):
     Extract text from a PDF file using pdfplumber.
     """
 
-    text = ""
+    try:
+        text = ""
 
-    with pdfplumber.open(filepath) as pdf:
-        for page in pdf.pages:
-            content = page.extract_text()
-            if content:
-                text += content + "\n"
+        with pdfplumber.open(filepath) as pdf:
+            for page in pdf.pages:
+                content = page.extract_text()
+                if content:
+                    text += content + "\n"
 
-    return text
+        return text.strip()
+    
+    except Exception as e:
+        print("PDF Parse Error:", e)
+        return ""
+
 
 
 
@@ -37,20 +43,23 @@ def extract_skills_from_resume(resume_text: str, GOOGLE_API_KEY: str):
     )
 
     prompt = f"""
-        Extract the TOP 10 most important technical skills from the resume below.
+    Extract ONLY the **technical skills** from this resume.
 
-        Allowed categories only:
-        - Programming languages
-        - Frameworks / libraries
-        - Databases
-        - Cloud platforms
-        - DevOps tools
+    Allowed categories:
+    - Programming languages
+    - Frameworks / libraries
+    - Databases
+    - Cloud platforms
+    - DevOps tools
 
-        Return output STRICTLY as valid JSON in this exact format:
+    Return STRICT JSON:
+    {{
+        "skills": ["Skill1", "Skill2", ...]
+    }}
 
-        {{"skills": ["Skill1", "Skill2", "Skill3"]}}
-
-        No explanations. No extra text.
+    NO explanation.
+    NO markdown.
+    ONLY JSON.
 
         Resume:
         ---------
@@ -62,20 +71,22 @@ def extract_skills_from_resume(resume_text: str, GOOGLE_API_KEY: str):
         response = llm.invoke(prompt)
         raw = response.content.strip()
 
-        # --- Extract ONLY the JSON dictionary safely ---
-        json_match = re.search(r"\{.*\}", raw, re.DOTALL)
+        json_match = re.search(r"\{.*?\}", raw, re.DOTALL)
 
         if not json_match:
             return []
 
-        json_text = json_match.group(0)
-
-        # --- Parse JSON ---
-        data = json.loads(json_text)
-
+        data = json.loads(json_match.group(0))
         skills = data.get("skills", [])
-        return skills[:10]
+
+        clean = []
+        for s in skills:
+            s = s.strip().title()
+            if s and s not in clean:
+                clean.append(s)
+
+        return clean[:10]
 
     except Exception as e:
-        print("❌ Error extracting skills:", e)
+        print("Skill extraction error:", e)
         return []
