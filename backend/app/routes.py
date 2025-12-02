@@ -5,6 +5,9 @@ import os
 import datetime
 import jwt
 
+from config import Config
+UPLOAD_FOLDER = Config.UPLOAD_FOLDER
+
 from flask import (
     Blueprint, json, jsonify, flash, request, redirect,
     url_for, render_template, send_from_directory
@@ -44,8 +47,6 @@ SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 
 
 main = Blueprint("main", __name__)
-
-UPLOAD_FOLDER = "C:/resumes/"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
@@ -471,11 +472,6 @@ def get_jobs(current_user):
 
 
 
-from flask import send_file
-
-# Define the folder where the file should be saved
-UPLOAD_FOLDER = "C:/resumes/"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # Ensure the folder exists
 
 @main.route('/api/register-candidate', methods=['POST'])
 def register_candidate():
@@ -584,20 +580,16 @@ def register_candidate():
             education=user_data["education"],
             age=user_data["age"],
             resume_file_path=file_path,
+            resume_parse_status="PENDING",   # <-- NEW
+            resume_parse_error=None, 
             status="ACTV"
         )
         db.session.add(new_candidate)
         db.session.commit()
 
         try:
-            from app.utils import parse_pdf, extract_skills_from_resume
-            GOOGLE_API_KEY = GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-            resume_text = parse_pdf(file_path)
-            print(resume_text)
-            skills = extract_skills_from_resume(resume_text, GOOGLE_API_KEY)
-            print(skills)
-            new_candidate.skills = ','.join(skills)
-            db.session.commit()
+            from app.tasks import parse_resume_and_update
+            parse_resume_and_update.delay(new_candidate.candidate_id, file_path)
         except Exception as e:
             print(e)
 
@@ -624,66 +616,61 @@ def register_candidate():
 @token_required
 def update_candidate(current_user):
     try:
-        # Ensure required payload exists
         if 'user_data' not in request.form:
             return jsonify({"error": "User data is required"}), 400
 
         user_data = json.loads(request.form['user_data'])
         resume_file = request.files.get('file')
 
-        # Fetch user + candidate
-        user = User.query.filter_by(user_id=current_user.user_id, status="ACTV").first()
-        if not user:
-            return jsonify({"error": "User not found"}), 404
+        user = User.query.filter_by(user_id=current_user.user_id).first()
+        candidate = Candidate.query.filter_by(user_id=current_user.user_id).first()
 
-        candidate = Candidate.query.filter_by(user_id=user.user_id).first()
-        if not candidate:
+        if not user or not candidate:
             return jsonify({"error": "Candidate not found"}), 404
 
-        # -----------------------------
-        # VALIDATION (Fixes your issue)
-        # -----------------------------
-        required_fields = ["firstname", "lastname", "email", "age", "education"]
-
-        missing = [f for f in required_fields if not user_data.get(f)]
-
-        if missing:
-            return jsonify({
-                "error": f"Missing required fields: {', '.join(missing)}"
-            }), 400
-
-        # -----------------------------
-        # UPDATE FIELDS (safe update)
-        # -----------------------------
+        # Update basic fields
         user.firstname = user_data["firstname"]
         user.lastname = user_data["lastname"]
         user.email = user_data["email"]
-
         candidate.age = user_data["age"]
         candidate.education = user_data["education"]
 
-        # -----------------------------
-        # OPTIONAL RESUME UPDATE
-        # -----------------------------
+        parsing_required = False
+        new_file_path = None
+
+        # -------------------------
+        # IF NEW RESUME UPLOADED
+        # -------------------------
         if resume_file:
-            original_filename = secure_filename(resume_file.filename)
-            extension = os.path.splitext(original_filename)[1]
+            filename = secure_filename(resume_file.filename)
+            ext = os.path.splitext(filename)[1]
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            unique_filename = f"{user.user_id}_{timestamp}{extension}"
+            unique_filename = f"{user.user_id}_{timestamp}{ext}"
+            new_file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
 
-            file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
-            resume_file.save(file_path)
+            resume_file.save(new_file_path)
+            candidate.resume_file_path = new_file_path
 
-            candidate.resume_file_path = file_path
+            # Reset parsing fields
+            candidate.resume_parse_status = "PENDING"
+            candidate.resume_parse_error = None
+            parsing_required = True
 
         db.session.commit()
 
-        return jsonify({"message": "Candidate updated successfully"}), 200
+        # Trigger parsing AFTER commit
+        if parsing_required:
+            from app.tasks import parse_resume_and_update
+            parse_resume_and_update.delay(candidate.candidate_id, new_file_path)
+
+        return jsonify({
+            "success": True,
+            "message": "Profile updated successfully",
+            "parsing_started": parsing_required
+        }), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
 
 
 def allowed_file(filename):
@@ -702,23 +689,27 @@ def get_all_jobs(current_user):
 
         jobs = []
         for job in jobs_data:
-            recruiter = User.query.get(job.created_by)
+
+            creator = User.query.get(job.created_by)
+            company_name = creator.firstname + " " + creator.lastname if creator else "Unknown"
+
             jobs.append({
                 "job_id": job.job_id,
-                "job_title": job.job_title,
-                "company": job.job_title,
-                "location": job.location,
-                "job_type": job.job_type,
-                "experience": job.experience,
-                "description": normalize_description(job.description),
-                "start_date": str(job.start_date),
-                "end_date": str(job.end_date),
+                "job_title": job.job_title or "",
+                "company": company_name,
+                "location": job.location or "",
+                "job_type": job.job_type or "",
+                "experience": job.experience if job.experience is not None else 0,
+                "description": normalize_description(job.description) or "",
+                "start_date": str(job.start_date) if job.start_date else "",
+                "end_date": str(job.end_date) if job.end_date else "",
             })
 
         return jsonify({"success": True, "jobs": jobs}), 200
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
 
 
 
@@ -1263,67 +1254,152 @@ def get_conversation_history(user_id: int, job_id: int):
 
 @main.route('/api/credibility-test/<int:job_id>', methods=['GET'])
 @token_required
-def send_questions(current_user,job_id):
+def send_questions(current_user, job_id):
+    import json, re
+
     candidate = Candidate.query.filter_by(user_id=current_user.user_id).first()
+    if not candidate:
+        return jsonify({"success": False, "message": "Candidate not found"}), 404
+
+    # Prevent issuing a new test if candidate already completed or applied
+    existing = CandidateJobRequest.query.filter_by(candidate_id=current_user.user_id, job_id=job_id).first()
+    if existing and existing.status in ("TEST_COMPLETED", "APPLIED", "SHORTLISTED", "INTERVIEWED", "OFFERED", "HIRED"):
+        return jsonify({
+            "success": False,
+            "message": "You have already completed the credibility test or applied for this job",
+            "questions": [],
+            "time_limit": 0
+        }), 400
+
+    if not candidate.skills:
+        return jsonify({
+            "success": False,
+            "message": "Resume not parsed yet",
+            "questions": [],
+            "time_limit": 0
+        }), 400
+
     skills_string = str(candidate.skills)
-    if not skills_string:
-        return "resume not parsed"
     job_post = Job.query.filter_by(job_id=job_id).first()
-    job_description = job_post.description
 
-    llm = ChatGoogleGenerativeAI(model='gemini-2.5-flash')
+    if not job_post:
+        return jsonify({"success": False, "message": "Job not found"}), 404
 
-    query = f"""
-    You are generating interview screening questions.
+    job_description = job_post.description or "No description provided"
 
-    Use these two inputs:
-    - Skills: {skills_string}
-    - Job Description: {job_description}
+    # Call Gemini
+    try:
+        llm = ChatGoogleGenerativeAI(model='gemini-2.5-flash')
 
-    Generate EXACTLY 10 multiple-choice interview questions:
-    - The FIRST 5 MCQs MUST come ONLY from the candidate skills.
-    - The NEXT 5 MCQs MUST come ONLY from the job description.
-    - EACH question must have:
-        - EXACTLY 4 options labeled "A", "B", "C", "D".
-        - EXACTLY ONE correct option.
-        - A field "correct_option" containing ONLY the letter of the correct answer (A/B/C/D).
+        query = f"""
+        You must return STRICT JSON and nothing else.
 
-    Return the output STRICTLY in this JSON format:
+        Candidate Skills: {skills_string}
+        Job Description: {job_description}
 
-    {{
-        "questions": [
-            {{
-                "question": "<question text>",
-                "options": {{
-                    "A": "<option text>",
-                    "B": "<option text>",
-                    "C": "<option text>",
-                    "D": "<option text>"
-                }},
-                "correct_option": "<A/B/C/D>"
-            }},
-            ...
-            (10 items total)
-        ]
-    }}
+        Generate EXACTLY 10 MCQs:
+        - First 5 from candidate skills
+        - Next 5 from job description
 
-    NO additional text.
-    NO markdown.
-    ONLY valid JSON.
-"""
+        Format:
+        {{
+            "questions": [
+                {{
+                    "question": "...",
+                    "options": {{
+                        "A": "...",
+                        "B": "...",
+                        "C": "...",
+                        "D": "..."
+                    }},
+                    "correct_option": "A"
+                }}
+            ],
+            "time_limit": <int>
+        }}
+        """
+
+        response = llm.invoke(query)
+        raw = response.content.strip()
+
+        # Extract ONLY JSON
+        match = re.search(r"\{[\s\S]*\}", raw)
+        if not match:
+            return jsonify({
+                "success": False,
+                "message": "AI did not return valid JSON",
+                "questions": [],
+                "time_limit": 0
+            }), 500
+
+        json_text = match.group(0)
+        result = json.loads(json_text)
+
+        # Validate response
+        if "questions" not in result or not isinstance(result["questions"], list):
+            return jsonify({
+                "success": False,
+                "message": "Invalid question format received",
+                "questions": [],
+                "time_limit": 0
+            }), 500
+
+        # Ensure time_limit exists
+        time_limit = int(result.get("time_limit", 90))
+
+        return jsonify({
+            "success": True,
+            "job_id": job_id,
+            "questions": result["questions"],
+            "time_limit": time_limit
+        }), 200
+
+    except Exception as e:
+        print("Credibility Test Error:", e)
+        return jsonify({
+            "success": False,
+            "message": "Internal server error: " + str(e),
+            "questions": [],
+            "time_limit": 0
+        }), 500
 
 
-    response = llm.invoke(query)
 
-    # Gemini content is inside:
-    model_json = response.content
 
-    import json
-    questions_json = json.loads(model_json)
+@main.route("/api/resume-status", methods=["GET"])
+@token_required
+def resume_status(current_user):
+    candidate = Candidate.query.filter_by(user_id=current_user.user_id).first()
 
-    questions_json["job_id"] = job_id
+    if not candidate:
+        return jsonify({"success": False, "message": "Candidate not found"}), 404
 
-    return jsonify(questions_json)
+    return jsonify({
+        "success": True,
+        "status": candidate.resume_parse_status,   # PENDING / PARSING / SUCCESS / FAILED
+        "error": candidate.resume_parse_error,
+        "skills": (candidate.skills.split(",") if candidate.skills else [])
+    })
+
+
+@main.route("/api/resume-retry", methods=["POST"])
+@token_required
+def resume_retry(current_user):
+    candidate = Candidate.query.filter_by(user_id=current_user.user_id).first()
+    if not candidate:
+        return jsonify({"success": False, "message": "Candidate not found"}), 404
+
+    if not candidate.resume_file_path:
+        return jsonify({"success": False, "message": "No resume uploaded"}), 400
+
+    from app.tasks import parse_resume_and_update
+    candidate.resume_parse_status = "PENDING"
+    candidate.resume_parse_error = None
+    db.session.commit()
+
+    parse_resume_and_update.delay(candidate.candidate_id, candidate.resume_file_path)
+
+    return jsonify({"success": True, "message": "Resume parsing restarted"})
 
 
 
@@ -1335,30 +1411,160 @@ def submit_test(current_user, job_id):
     if not data or "score" not in data:
         return jsonify({"error": "score is required"}), 400
 
-    score = data.get("score")
+    try:
+        score = int(data["score"])
+    except Exception:
+        return jsonify({"error": "score must be an integer"}), 400
 
-    # Find candidate-job relation
+    # Check existing relation
+    cjr = CandidateJobRequest.query.filter_by(
+        candidate_id=current_user.user_id,
+        job_id=job_id
+    ).first()
+
+    # If already applied/processed -> block resubmission
+    if cjr and cjr.status in ("APPLIED", "SHORTLISTED", "INTERVIEWED", "OFFERED", "HIRED"):
+        return jsonify({"success": False, "message": "You have already applied or been processed for this job"}), 400
+
+    # Create or update record with TEST_COMPLETED, then auto-apply
+    try:
+        if not cjr:
+            cjr = CandidateJobRequest(
+                candidate_id=current_user.user_id,
+                job_id=job_id,
+                test_score=score,
+                status="TEST_COMPLETED",
+                status_change_date=datetime.datetime.utcnow()
+            )
+            db.session.add(cjr)
+        else:
+            cjr.test_score = score
+            cjr.status = "TEST_COMPLETED"
+            cjr.status_change_date = datetime.datetime.utcnow()
+
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "database error while saving test", "details": str(e)}), 500
+
+    # AUTO-APPLY: update the same CandidateJobRequest to APPLIED
+    try:
+        cjr = CandidateJobRequest.query.filter_by(candidate_id=current_user.user_id, job_id=job_id).first()
+        if cjr:
+            cjr.status = "APPLIED"
+            cjr.status_change_date = datetime.datetime.utcnow()
+            db.session.commit()
+        else:
+            # This branch unlikely, but create as APPLIED to be safe
+            new_cjr = CandidateJobRequest(
+                candidate_id=current_user.user_id,
+                job_id=job_id,
+                test_score=score,
+                status="APPLIED",
+                status_change_date=datetime.datetime.utcnow()
+            )
+            db.session.add(new_cjr)
+            db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        # test saved but auto-apply failed: reply success but notify client
+        return jsonify({
+            "success": True,
+            "message": "Test completed, but auto-apply failed. Please try applying manually.",
+            "score": score,
+            "status": "TEST_COMPLETED"
+        }), 200
+
+    # Success
+    return jsonify({
+        "success": True,
+        "message": "Test completed and application submitted",
+        "score": score,
+        "status": "APPLIED"
+    }), 200
+
+
+
+@main.route('/api/job-apply', methods=['POST'])
+@token_required
+def apply_job(current_user):
+    data = request.get_json() or {}
+    job_id = data.get("job_id")
+
+    if not job_id:
+        return jsonify({"success": False, "message": "job_id is required"}), 400
+
+    # Check job exists
+    job = Job.query.filter_by(job_id=job_id).first()
+    if not job:
+        return jsonify({"success": False, "message": "Job not found"}), 404
+
+    # Check if candidate completed test
     cjr = CandidateJobRequest.query.filter_by(
         candidate_id=current_user.user_id,
         job_id=job_id
     ).first()
 
     if not cjr:
-        return jsonify({"error": "candidate-job relation not found"}), 404
+        return jsonify({
+            "success": False,
+            "message": "You must complete the credibility test before applying"
+        }), 403
 
-    # Update the test score
-    cjr.test_score = score
-    cjr.status_change_date = datetime.utcnow()
+    # If already applied, return idempotent success
+    if cjr.status == "APPLIED":
+        return jsonify({"success": True, "message": "Already applied"}), 200
 
+    # Allow apply when test was completed
+    if cjr.status not in ("TEST_COMPLETED", "APPLIED"):
+        return jsonify({
+            "success": False,
+            "message": "Test not completed. Please finish test first."
+        }), 403
+
+    # Apply job (transition to APPLIED)
     try:
+        cjr.status = "APPLIED"
+        cjr.status_change_date = datetime.datetime.utcnow()
         db.session.commit()
+        return jsonify({
+            "success": True,
+            "message": "Application submitted successfully"
+        }), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": "database error", "details": str(e)}), 500
+        return jsonify({"success": False, "message": "Failed to apply", "error": str(e)}), 500
 
-    return jsonify({
-        "message": "test score submitted successfully",
-        "job_id": job_id,
-        "candidate_id": current_user.user_id,
-        "score": score
-    }), 200
+
+@main.route('/api/applied-jobs', methods=['GET'])
+@token_required
+def get_applied_jobs(current_user):
+
+    if current_user.role != "CANDIDATE":
+        return jsonify({"success": False, "message": "Only candidates allowed"}), 403
+
+    results = db.session.query(
+        CandidateJobRequest,
+        Job,
+        User
+    ).join(Job, CandidateJobRequest.job_id == Job.job_id) \
+     .join(User, Job.created_by == User.user_id) \
+     .filter(CandidateJobRequest.candidate_id == current_user.user_id).all()
+
+    applications = []
+    for req, job, recruiter in results:
+        applications.append({
+            "request_id": req.candidate_job_request_id,
+            "job_id": job.job_id,
+            "job_title": job.job_title,
+            "company": recruiter.firstname + " " + recruiter.lastname,
+            "location": job.location,
+            "status": req.status,
+            "test_score": req.test_score,
+            "applied_on": req.status_change_date.strftime("%Y-%m-%d %H:%M:%S")
+                if req.status_change_date else None,
+            "experience": job.experience,
+            "description": normalize_description(job.description)
+        })
+
+    return jsonify({"success": True, "applications": applications}), 200

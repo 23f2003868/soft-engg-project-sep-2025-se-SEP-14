@@ -210,14 +210,19 @@ GOOGLE_API_KEY=your_key
 
 ### 8. Initialize Database
 ```bash
->>> flask db init
->>> flask db migrate -m "initial db"
->>> flask db upgrade
+flask db init
+flask db migrate -m "initial db"
+flask db upgrade
 ```
-flask db init ; flask db migrate -m "initial db" ; flask db upgrade  
+
 ### 9. Run Backend
 ```bash
 python run.py
+```
+
+### 10. Run Celery Server
+```bash
+celery -A app.celery_app.celery worker --loglevel=info --pool=solo
 ```
 
 Server runs at:
@@ -225,3 +230,6 @@ Server runs at:
 http://localhost:5173/  (Frontend)
 http://127.0.0.1:5000   (Backend)
 ```
+
+
+
