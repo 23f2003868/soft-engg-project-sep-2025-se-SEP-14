@@ -40,7 +40,7 @@
 
           <div class="col-lg-6 text-center">
             <img
-              src="https://plus.unsplash.com/premium_photo-1661632752188-5fbc13fd4697?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8OXx8d29tYW4lMjB3b3JraW5nJTIwb24lMjBsYXB0b3B8ZW58MHx8MHx8fDA%3D&fm=jpg&q=60&w=3000"
+              src="/images/team/young-businesswomen-working-with-digital-tablet-her-office.jpg"
               alt="Career Woman with Tablet"
               class="img-fluid floating-girl"
               width="420"

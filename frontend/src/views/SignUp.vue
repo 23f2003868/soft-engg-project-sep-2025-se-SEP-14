@@ -7,14 +7,15 @@
 
         <h2 class="text-center fw-bold text-gradient mb-3">Create Account 🚀</h2>
         <p class="text-center text-muted mb-4">
-          Join <span class="fw-semibold">ApplAI</span> and start your dream career today.
+          Join <span class="fw-semibold">ApplAI</span> and unlock smart career opportunities.
         </p>
 
         <form @submit.prevent="handleSignup" novalidate>
 
           <!-- ROLE -->
           <div class="form-floating mb-3">
-            <select v-model="role" 
+            <select 
+              v-model="role"
               class="form-select rounded-3 shadow-sm"
               :class="{ 'is-invalid': roleError }">
               <option value="">Select Role</option>
@@ -27,126 +28,167 @@
 
           <!-- FIRST NAME -->
           <div class="form-floating mb-3">
-            <input type="text" v-model="firstname"
-              placeholder="First Name"
+            <input 
+              type="text" v-model="firstname"
+              placeholder="Enter your first name"
               class="form-control rounded-3 shadow-sm"
-              :class="{ 'is-invalid': firstnameError }" />
+              :class="{ 'is-invalid': firstnameError }"
+            />
             <label>First Name</label>
             <div class="invalid-feedback small">{{ firstnameError }}</div>
           </div>
 
           <!-- LAST NAME -->
           <div class="form-floating mb-3">
-            <input type="text" v-model="lastname"
-              placeholder="Last Name"
+            <input 
+              type="text" v-model="lastname"
+              placeholder="Enter your last name"
               class="form-control rounded-3 shadow-sm"
-              :class="{ 'is-invalid': lastnameError }" />
+              :class="{ 'is-invalid': lastnameError }"
+            />
             <label>Last Name</label>
             <div class="invalid-feedback small">{{ lastnameError }}</div>
           </div>
 
           <!-- EMAIL -->
           <div class="form-floating mb-3">
-            <input type="email" v-model="email"
+            <input 
+              type="email" v-model="email"
               placeholder="name@example.com"
               class="form-control rounded-3 shadow-sm"
-              :class="{ 'is-invalid': emailError }" />
+              :class="{ 'is-invalid': emailError }"
+            />
             <label>Email Address</label>
             <div class="invalid-feedback small">{{ emailError }}</div>
           </div>
 
           <!-- PASSWORD -->
           <div class="form-floating mb-3">
-            <input type="password" v-model="password"
-              placeholder="Password"
+            <input 
+              type="password" v-model="password"
+              placeholder="Minimum 6 characters"
               class="form-control rounded-3 shadow-sm"
-              :class="{ 'is-invalid': passwordError }" />
+              :class="{ 'is-invalid': passwordError }"
+            />
             <label>Password</label>
             <div class="invalid-feedback small">{{ passwordError }}</div>
           </div>
 
           <!-- CONFIRM PASSWORD -->
           <div class="form-floating mb-4">
-            <input type="password" v-model="confirmPassword"
-              placeholder="Confirm Password"
+            <input 
+              type="password" v-model="confirmPassword"
+              placeholder="Re-enter your password"
               class="form-control rounded-3 shadow-sm"
-              :class="{ 'is-invalid': confirmPasswordError }" />
+              :class="{ 'is-invalid': confirmPasswordError }"
+            />
             <label>Confirm Password</label>
             <div class="invalid-feedback small">{{ confirmPasswordError }}</div>
           </div>
 
-          <!-- Candidate Fields -->
+          <!-- ========================= -->
+          <!-- CANDIDATE FIELDS -->
+          <!-- ========================= -->
           <template v-if="role === 'CANDIDATE'">
 
             <div class="form-floating mb-3">
-              <input type="number" v-model="age"
-                placeholder="Age"
+              <input 
+                type="number" v-model="age"
+                placeholder="Enter your age"
                 class="form-control rounded-3 shadow-sm"
-                :class="{ 'is-invalid': ageError }" />
+                :class="{ 'is-invalid': ageError }"
+              />
               <label>Age</label>
               <div class="invalid-feedback small">{{ ageError }}</div>
             </div>
 
             <div class="form-floating mb-3">
-              <input type="text" v-model="education"
-                placeholder="Education"
+              <input 
+                type="text" v-model="education"
+                placeholder="Your qualification"
                 class="form-control rounded-3 shadow-sm"
-                :class="{ 'is-invalid': educationError }" />
+                :class="{ 'is-invalid': educationError }"
+              />
               <label>Education</label>
               <div class="invalid-feedback small">{{ educationError }}</div>
             </div>
 
             <div class="mb-3">
               <label class="form-label fw-semibold">Upload Resume</label>
-              <input type="file" @change="handleFile"
+              <input 
+                type="file" @change="handleFile"
                 class="form-control shadow-sm rounded-3"
-                :class="{ 'is-invalid': resumeError }" />
+                :class="{ 'is-invalid': resumeError }"
+              />
               <div class="invalid-feedback small">{{ resumeError }}</div>
             </div>
 
           </template>
 
-          <!-- Recruiter Fields -->
+          <!-- ========================= -->
+          <!-- RECRUITER FIELDS -->
+          <!-- ========================= -->
           <template v-if="role === 'RECRUITER'">
 
             <div class="form-floating mb-3">
-              <input type="text" v-model="company"
-                placeholder="Company"
+              <input 
+                type="text" v-model="company"
+                placeholder="Company name"
                 class="form-control rounded-3 shadow-sm"
-                :class="{ 'is-invalid': companyError }" />
+                :class="{ 'is-invalid': companyError }"
+              />
               <label>Company</label>
               <div class="invalid-feedback small">{{ companyError }}</div>
             </div>
 
             <div class="form-floating mb-3">
-              <input type="text" v-model="position"
-                placeholder="Position"
+              <input 
+                type="text" v-model="position"
+                placeholder="Recruiter position"
                 class="form-control rounded-3 shadow-sm"
-                :class="{ 'is-invalid': positionError }" />
+                :class="{ 'is-invalid': positionError }"
+              />
               <label>Position</label>
               <div class="invalid-feedback small">{{ positionError }}</div>
             </div>
 
+            <!-- new field as required by backend -->
             <div class="form-floating mb-3">
-              <input type="url" v-model="linkdin"
-                placeholder="https://linkedin.com/in/username"
+              <textarea 
+                v-model="company_about"
+                placeholder="Describe your company in 2–4 lines"
                 class="form-control rounded-3 shadow-sm"
-                :class="{ 'is-invalid': linkdinError }" />
+                style="height: 100px;"
+                :class="{ 'is-invalid': companyAboutError }"
+              ></textarea>
+              <label>About Company</label>
+              <div class="invalid-feedback small">{{ companyAboutError }}</div>
+            </div>
+
+            <div class="form-floating mb-3">
+              <input 
+                type="url" v-model="linkdin"
+                placeholder="https://www.linkedin.com/in/your-profile"
+                class="form-control rounded-3 shadow-sm"
+                :class="{ 'is-invalid': linkdinError }"
+              />
               <label>LinkedIn Profile</label>
               <div class="invalid-feedback small">{{ linkdinError }}</div>
             </div>
 
           </template>
 
-          <!-- Server Error -->
+          <!-- SERVER ERROR -->
           <div v-if="serverError" class="alert alert-danger text-center small py-2 mb-3">
             {{ serverError }}
           </div>
 
           <!-- SUBMIT BUTTON -->
-          <button type="submit"
+          <button 
+            type="submit"
             class="btn btn-gradient w-100 fw-bold py-2 rounded-3 shadow-sm"
-            :disabled="isLoading">
+            :disabled="isLoading"
+          >
             {{ isLoading ? 'Creating Account...' : 'Sign Up' }}
           </button>
 
@@ -164,7 +206,6 @@
   </div>
 </template>
 
-
 <script setup>
 import Navbar from '../components/Navbar.vue';
 import { ref, watch } from "vue";
@@ -174,23 +215,27 @@ import Swal from "sweetalert2";
 const router = useRouter();
 const API_URL = "http://127.0.0.1:5000";
 
-// 🔹 Shared LinkedIn regex (used in validate + watchers)
-const linkedinRegex = /^https:\/\/(www\.)?linkedin\.com\/.*$/;
+// LinkedIn validation pattern
+const linkedinRegex = /^https:\/\/(www\.)?linkedin\.com\/(in|company)\/[A-Za-z0-9_\-]+\/?$/;
 
+// Form fields
 const role = ref("");
 const firstname = ref("");
 const lastname = ref("");
 const email = ref("");
 const password = ref("");
 const confirmPassword = ref("");
+
 const age = ref("");
 const education = ref("");
 const resumeFile = ref(null);
 
 const company = ref("");
 const position = ref("");
+const company_about = ref("");
 const linkdin = ref("");
 
+// Error fields
 const roleError = ref("");
 const firstnameError = ref("");
 const lastnameError = ref("");
@@ -202,93 +247,81 @@ const educationError = ref("");
 const resumeError = ref("");
 const companyError = ref("");
 const positionError = ref("");
+const companyAboutError = ref("");
 const linkdinError = ref("");
 const serverError = ref("");
 
 const isLoading = ref(false);
 
-const handleFile = (e) => resumeFile.value = e.target.files[0];
+const handleFile = (e) => {
+  resumeFile.value = e.target.files[0];
+  resumeError.value = "";
+};
 
-/* 🔥 LIVE ERROR CLEARING WHEN USER FIXES INPUT */
-watch(role, (val) => {
-  if (val) roleError.value = "";
-});
+// Live error clearing
+const clear = (v, r) => { if (v) r.value = ""; };
 
-watch(firstname, (val) => {
-  if (val) firstnameError.value = "";
-});
-
-watch(lastname, (val) => {
-  if (val) lastnameError.value = "";
-});
-
-watch(email, (val) => {
-  if (val && val.includes("@")) emailError.value = "";
-});
-
-watch(password, (val) => {
-  if (val && val.length >= 6) passwordError.value = "";
-  // also re-check confirmPassword match
-  if (confirmPassword.value && val === confirmPassword.value) {
+watch(role, (v) => clear(v, roleError));
+watch(firstname, (v) => clear(v.trim(), firstnameError));
+watch(lastname, (v) => clear(v.trim(), lastnameError));
+watch(email, (v) => { if (v.includes("@")) emailError.value = ""; });
+watch(password, (v) => {
+  if (v.length >= 6) passwordError.value = "";
+  if (confirmPassword.value && v === confirmPassword.value)
     confirmPasswordError.value = "";
-  }
+});
+watch(confirmPassword, (v) => {
+  if (v === password.value) confirmPasswordError.value = "";
+});
+watch(age, (v) => clear(v, ageError));
+watch(education, (v) => clear(v.trim(), educationError));
+watch(company, (v) => clear(v.trim(), companyError));
+watch(position, (v) => clear(v.trim(), positionError));
+watch(company_about, (v) => clear(v.trim(), companyAboutError));
+watch(linkdin, (v) => {
+  if (linkedinRegex.test(v.trim())) linkdinError.value = "";
 });
 
-watch(confirmPassword, (val) => {
-  if (val && val === password.value) confirmPasswordError.value = "";
-});
-
-watch(age, (val) => {
-  if (val) ageError.value = "";
-});
-
-watch(education, (val) => {
-  if (val) educationError.value = "";
-});
-
-watch(resumeFile, (val) => {
-  if (val) resumeError.value = "";
-});
-
-watch(company, (val) => {
-  if (val) companyError.value = "";
-});
-
-watch(position, (val) => {
-  if (val) positionError.value = "";
-});
-
-watch(linkdin, (val) => {
-  if (val && linkedinRegex.test(val.trim())) {
-    linkdinError.value = "";
-  }
-});
-
+// VALIDATION
 const validateForm = () => {
   let valid = true;
 
-  if (!role.value) { roleError.value = "Please select role"; valid = false; }
-  if (!firstname.value) { firstnameError.value = "First name required"; valid = false; }
-  if (!lastname.value) { lastnameError.value = "Last name required"; valid = false; }
-  if (!email.value.includes("@")) { emailError.value = "Invalid email"; valid = false; }
-  if (password.value.length < 6) { passwordError.value = "Min 6 characters"; valid = false; }
-  if (password.value !== confirmPassword.value) { confirmPasswordError.value = "Passwords do not match"; valid = false; }
+  if (!role.value) { roleError.value = "Select role"; valid = false; }
 
+  if (!firstname.value.trim()) { firstnameError.value = "First name required"; valid = false; }
+  if (!lastname.value.trim()) { lastnameError.value = "Last name required"; valid = false; }
+
+  if (!email.value.includes("@")) { emailError.value = "Invalid email"; valid = false; }
+
+  if (password.value.length < 6) { passwordError.value = "Min 6 characters"; valid = false; }
+
+  if (password.value !== confirmPassword.value) {
+    confirmPasswordError.value = "Passwords do not match";
+    valid = false;
+  }
+
+  // Candidate
   if (role.value === "CANDIDATE") {
-    if (!age.value) { ageError.value = "Age required"; valid = false; }
-    if (!education.value) { educationError.value = "Education required"; valid = false; }
+    if (!age.value || age.value < 16) { ageError.value = "Enter valid age"; valid = false; }
+    if (!education.value.trim()) { educationError.value = "Education required"; valid = false; }
     if (!resumeFile.value) { resumeError.value = "Resume required"; valid = false; }
   }
 
+  // Recruiter
   if (role.value === "RECRUITER") {
-    if (!company.value) { companyError.value = "Company required"; valid = false; }
-    if (!position.value) { positionError.value = "Position required"; valid = false; }
+    if (!company.value.trim()) { companyError.value = "Company name required"; valid = false; }
+    if (!position.value.trim()) { positionError.value = "Position required"; valid = false; }
 
-    if (!linkdin.value) {
-      linkdinError.value = "LinkedIn link required";
+    if (!company_about.value.trim()) {
+      companyAboutError.value = "Company about required";
+      valid = false;
+    }
+
+    if (!linkdin.value.trim()) {
+      linkdinError.value = "LinkedIn required";
       valid = false;
     } else if (!linkedinRegex.test(linkdin.value.trim())) {
-      linkdinError.value = "Enter a valid LinkedIn URL (example: https://www.linkedin.com/in/username)";
+      linkdinError.value = "Invalid LinkedIn URL";
       valid = false;
     }
   }
@@ -296,6 +329,7 @@ const validateForm = () => {
   return valid;
 };
 
+// HANDLE SIGNUP
 const handleSignup = async () => {
   serverError.value = "";
 
@@ -304,8 +338,9 @@ const handleSignup = async () => {
   isLoading.value = true;
 
   try {
+    // CANDIDATE
     if (role.value === "CANDIDATE") {
-      let formData = new FormData();
+      const formData = new FormData();
       formData.append("file", resumeFile.value);
 
       const userData = {
@@ -319,13 +354,18 @@ const handleSignup = async () => {
 
       formData.append("user_data", JSON.stringify(userData));
 
-      const res = await fetch(`${API_URL}/api/register-candidate`, { method: "POST", body: formData });
+      const res = await fetch(`${API_URL}/api/register-candidate`, {
+        method: "POST",
+        body: formData
+      });
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message || "Signup failed");
+      if (!res.ok) throw new Error(data.message || "Signup failed");
     }
 
+    // RECRUITER
     if (role.value === "RECRUITER") {
-      let body = {
+      const body = {
         firstname: firstname.value,
         lastname: lastname.value,
         email: email.value,
@@ -333,6 +373,7 @@ const handleSignup = async () => {
         company: company.value,
         position: position.value,
         linkdin_profile_path: linkdin.value,
+        company_about: company_about.value,
       };
 
       const res = await fetch(`${API_URL}/api/register-recruiter`, {
@@ -342,7 +383,7 @@ const handleSignup = async () => {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message || "Signup failed");
+      if (!res.ok) throw new Error(data.message);
     }
 
     Swal.fire({
@@ -354,6 +395,7 @@ const handleSignup = async () => {
     });
 
     router.push("/login?signupSuccess=true");
+
   } catch (err) {
     serverError.value = err.message;
   }
@@ -369,57 +411,28 @@ const handleSignup = async () => {
   backdrop-filter: blur(10px);
 }
 
-/* Glassmorphism Card */
 .signup-card {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.88);
   border-radius: 1.25rem;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  max-width: 460px;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  max-width: 480px;
   width: 100%;
-  transition: 0.3s ease;
 }
 
-.signup-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 10px 25px rgba(0, 114, 255, 0.15);
-}
-
-/* Floating Labels Premium Style */
-.form-floating > label {
-  padding-left: 12px;
-}
-
-.form-control,
-.form-select {
-  height: 48px !important;
-  font-size: 15px;
-  border-radius: 12px !important;
-  border: 1.5px solid #d4d9e1;
-  transition: all 0.2s ease-in-out;
-}
-
-.form-control:focus,
-.form-select:focus {
-  border-color: #0072ff;
-  box-shadow: 0 0 0 0.15rem rgba(0, 114, 255, 0.15);
-}
-
-/* Gradient Title */
 .text-gradient {
   background: linear-gradient(90deg, #00c6ff, #0072ff);
   -webkit-background-clip: text;
   color: transparent;
 }
 
-/* Gradient Button */
 .btn-gradient {
   background: linear-gradient(90deg, #0072ff, #00c6ff);
   color: white;
+  transition: 0.3s;
 }
-
 .btn-gradient:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 14px rgba(0, 114, 255, 0.25);
+  box-shadow: 0 4px 12px rgba(0, 114, 255, 0.25);
 }
 </style>

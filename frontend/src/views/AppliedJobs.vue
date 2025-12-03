@@ -11,7 +11,7 @@
           <p class="text-muted small">Track your job application progress in real-time.</p>
         </div>
 
-        <!-- SEARCH & FILTERS -->
+        <!-- SEARCH + FILTERS -->
         <div class="glass-card filter-card p-3 p-md-4 mb-4 fade-in">
           <div class="row g-3 align-items-center">
 
@@ -51,7 +51,7 @@
           </div>
         </div>
 
-        <!-- LOADING STATE -->
+        <!-- LOADING -->
         <div v-if="loading" class="text-center py-5">
           <div class="spinner-border text-primary"></div>
           <p class="text-muted small mt-2">Loading your applications...</p>
@@ -61,32 +61,46 @@
         <div v-else>
           <div v-if="filteredJobs.length" class="row g-4 fade-in">
 
-            <div
-              v-for="job in filteredJobs"
-              :key="job.job_id"
-              class="col-md-6 col-lg-4"
-            >
-              <!-- MODERN JOB CARD -->
-              <div class="job-card-modern p-4">
+            <div v-for="job in filteredJobs" :key="job.job_id" class="col-md-6 col-lg-4">
 
-                <!-- Title + Status -->
-                <div class="d-flex justify-content-between align-items-start mb-2">
-                  <div>
-                    <h5 class="fw-bold job-title">{{ job.job_title }}</h5>
-                    <div class="text-muted small d-flex align-items-center">
-                      <i class="bi bi-geo-alt me-1 text-primary"></i>
-                      {{ job.location }}
+              <!-- MODERN JOB CARD -->
+              <div class="job-card-modern glass-card p-4 d-flex flex-column h-100">
+
+                <!-- HEADER -->
+                <div class="d-flex justify-content-between mb-3">
+
+                  <!-- LEFT SECTION (Avatar + Info) -->
+                  <div class="d-flex gap-3">
+
+                    <!-- Avatar -->
+                    <div class="job-avatar shadow-sm">
+                      <img :src="generateJobAvatar(job.job_title)" />
+                    </div>
+
+                    <!-- Title / Company / Location -->
+                    <div>
+                      <h5 class="fw-bold text-dark mb-1 job-title">{{ job.job_title }}</h5>
+
+                      <div class="text-primary fw-semibold small mb-1">
+                        <i class="bi bi-building me-1"></i> {{ job.company }}
+                      </div>
+
+                      <div class="text-muted small">
+                        <i class="bi bi-geo-alt me-1 text-primary"></i> {{ job.location }}
+                      </div>
                     </div>
                   </div>
-
-                  <!-- STATUS BADGE -->
-                  <span :class="['status-badge', normalizeStatus(job.status)]">
-                    {{ job.status }}
-                  </span>
+                  <div class="text-end ms-auto">
+                    <span :class="['status-badge', normalizeStatus(job.status)]">
+                      {{ job.status }}
+                    </span>
+                  </div>
+              
                 </div>
 
+
                 <!-- APPLIED DATE -->
-                <p class="small text-secondary mt-2">
+                <p class="small text-secondary border-start ps-2 mt-2 mb-0">
                   <i class="bi bi-calendar-check text-primary me-1"></i>
                   Applied on:
                   <span class="fw-semibold">{{ formatReadableDate(job.applied_on) }}</span>
@@ -94,7 +108,6 @@
 
                 <!-- PROGRESS PIPELINE -->
                 <div class="progress-container mt-4">
-
                   <div
                     v-for="(stage, index) in stages"
                     :key="index"
@@ -105,15 +118,17 @@
                     }"
                   >
 
-                    <div class="step-icon">
-                      <i :class="stage.icon"></i>
+                    <div class="step-icon-wrapper">
+                      <div class="step-icon">
+                        <i :class="stage.icon"></i>
+                      </div>
                     </div>
 
                     <span class="step-label">{{ stage.label }}</span>
 
+                    <!-- connector -->
                     <div v-if="index < stages.length - 1" class="step-line"></div>
                   </div>
-
                 </div>
 
               </div>
@@ -121,16 +136,16 @@
 
           </div>
 
-          <!-- EMPTY -->
+          <!-- EMPTY STATE -->
           <div v-else class="text-center mt-5">
             <i class="bi bi-search fs-1 text-secondary"></i>
             <p class="text-muted mt-2">No job applications found.</p>
           </div>
+
         </div>
 
       </div>
     </section>
-
   </div>
 </template>
 
@@ -148,29 +163,43 @@ const sortOption = ref("LATEST");
 const statusFilter = ref("");
 
 /* -----------------------------------
-   HIRING PIPELINE STAGES
+   PIPELINE STAGES
 ----------------------------------- */
 const stages = [
   { label: "Applied", icon: "bi bi-send" },
   { label: "Shortlisted", icon: "bi bi-stars" },
-  { label: "Interviwed", icon: "bi bi-pencil-square" },
-  { label: "Offered", icon: "bi bi-person-lines-fill" },
+  { label: "Interviewed", icon: "bi bi-pencil-square" },
+  { label: "Offered", icon: "bi bi-briefcase" },
   { label: "Final", icon: "bi bi-flag" },
 ];
 
-/* Normalize backend statuses */
+/* Avatar utils */
+function getInitialsFromTitle(title) {
+  if (!title) return "JD";
+  const parts = title.trim().split(" ");
+  return parts.length === 1
+    ? (parts[0][0] + (parts[0][1] || "D")).toUpperCase()
+    : (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function generateJobAvatar(title) {
+  const initials = getInitialsFromTitle(title);
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=3864f2&color=fff&rounded=true`;
+}
+
+/* Status utils */
 function normalizeStatus(status) {
   return status.toLowerCase().replace(" ", "");
 }
 
-/* Determine stage index */
 function currentStageIndex(job) {
   switch (job.status) {
     case "Applied": return 0;
     case "Shortlisted": return 1;
-    case "Tested":
-    case "Test Completed": return 2;
-    case "HR Review": return 3;
+    case "Test Completed":
+    case "HR Review":
+    case "Interviewed": return 2;
+    case "Offered": return 3;
     case "Selected":
     case "Rejected": return 4;
     default: return 0;
@@ -181,7 +210,6 @@ function isFinalStage(job, stage) {
   return stage.label === "Final" && ["Selected", "Rejected"].includes(job.status);
 }
 
-/* Format date */
 function formatReadableDate(date) {
   if (!date) return "N/A";
   return new Date(date).toLocaleDateString("en-IN", {
@@ -191,26 +219,22 @@ function formatReadableDate(date) {
   });
 }
 
-/* Fetch applied jobs */
+/* Fetch applications */
 async function loadAppliedJobs() {
   loading.value = true;
-
   try {
     const res = await fetch(`${API_URL}/applied-jobs`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
     });
-
     const data = await res.json();
     appliedJobs.value = data.applications || [];
-
   } catch (err) {
     console.error("Failed to load applied jobs", err);
   }
-
   loading.value = false;
 }
 
-/* Filters + Sorting */
+/* Filters */
 const filteredJobs = computed(() => {
   let list = [...appliedJobs.value];
 
@@ -218,6 +242,7 @@ const filteredJobs = computed(() => {
     const q = searchQuery.value.toLowerCase();
     list = list.filter(job =>
       job.job_title?.toLowerCase().includes(q) ||
+      job.company?.toLowerCase().includes(q) ||
       job.location?.toLowerCase().includes(q)
     );
   }
@@ -243,145 +268,149 @@ onMounted(loadAppliedJobs);
 </script>
 
 <style scoped>
-/* PAGE BACKGROUND */
+/* Background */
 .applied-jobs-page {
-  background: radial-gradient(circle at top left, #e8f0ff, #eef5ff);
   min-height: 100vh;
+  background: radial-gradient(circle at top left, #e8f0ff, #eef5ff);
 }
 
-/* GLASS FILTER CARD */
+/* Glass card */
 .glass-card {
   border-radius: 1.4rem;
-  background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(210, 220, 240, 0.55);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.08);
 }
 
-/* MODERN JOB CARD */
+/* Job card */
 .job-card-modern {
-  background: white;
   border-radius: 20px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(220, 227, 240, 0.65);
+  backdrop-filter: blur(14px);
   transition: 0.25s ease;
 }
 
 .job-card-modern:hover {
   transform: translateY(-6px);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 18px 40px rgba(25, 40, 70, 0.18);
 }
 
-/* STATUS BADGES */
-.status-badge {
-  padding: 6px 14px;
-  border-radius: 50px;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  font-weight: 600;
-  letter-spacing: 0.4px;
-}
-
-.status-badge.applied {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.status-badge.shortlisted {
-  background: #fef9c3;
-  color: #b45309;
-}
-
-.status-badge.testcompleted,
-.status-badge.tested {
-  background: #e0f2fe;
-  color: #0369a1;
-}
-
-.status-badge.hrreview {
-  background: #ede9fe;
-  color: #5b21b6;
-}
-
-.status-badge.selected {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.status-badge.rejected {
-  background: #fee2e2;
-  color: #b91c1c;
-}
-
-/* PROGRESS PIPELINE */
-.progress-container {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  position: relative;
-}
-
-.progress-step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: 1;
-  position: relative;
-}
-
-.step-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: #e5e7eb;
-  color: #374151;
+/* Avatar */
+.job-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #eef4ff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
+}
+
+.job-title {
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+/* Pipeline */
+.progress-container {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+  margin-top: 22px;
+  padding: 0 4px; /* Slight extra spacing (Option B improvement) */
+}
+
+.progress-step {
+  text-align: center;
+  width: 20%;
+  position: relative;
+}
+
+.step-icon-wrapper {
+  display: flex;
+  justify-content: center;
+}
+
+.step-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
   transition: 0.3s ease;
   z-index: 2;
+  margin-bottom: 6px;
 }
 
+/* status badge */
+.status-badge {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.status-badge.applied { background: #dbeafe; color: #1e40af; }
+.status-badge.shortlisted { background: #fef3c7; color: #92400e; }
+.status-badge.testcompleted { background: #e0f2fe; color: #0369a1; }
+.status-badge.hrreview { background: #e0f2fe; color: #0369a1; }
+.status-badge.interviewed { background: #fde68a; color: #92400e; }
+.status-badge.offered { background: #d1fae5; color: #166534; }
+.status-badge.selected { background: #dcfce7; color: #166534; }
+.status-badge.rejected { background: #fee2e2; color: #7f1d1d; }
+
+/* Completed */
 .progress-step.completed .step-icon {
   background: #4ade80;
-  color: white;
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
 }
 
+/* Final */
 .progress-step.final .step-icon {
   background: #facc15;
   color: #000;
 }
 
+/* Label */
 .step-label {
-  margin-top: 6px;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
+  font-weight: 600;
   color: #6b7280;
-  text-align: center;
+  margin-top: 4px;
 }
 
-/* Connecting lines */
+/* Connector line */
 .step-line {
   position: absolute;
-  top: 18px;
+  top: 24px;
   left: 50%;
-  width: 100%;
+  width: calc(100% + 6px); /* small spacing improvement */
   height: 3px;
-  background: #e5e7eb;
+  background: #d1d5db;
   z-index: 1;
 }
 
-.progress-step.completed ~ .step-line {
-  background: #4ade80;
+.progress-step.completed + .step-line {
+  background: #4ade80 !important;
 }
 
-/* Animation */
+/* Fade effect */
 .fade-in {
-  animation: fadeInUp 0.55s ease;
+  animation: fadeInUp 0.6s ease forwards;
 }
+
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 </style>

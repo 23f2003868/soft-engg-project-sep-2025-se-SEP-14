@@ -60,13 +60,11 @@
         <!-- Signup Redirect -->
         <p class="text-center mt-4 small text-muted">
           Don’t have an account?
-          <router-link
-            to="/signup"
-            class="fw-semibold text-gradient text-decoration-none"
-          >
+          <router-link to="/signup" class="fw-semibold text-gradient text-decoration-none">
             Sign Up
           </router-link>
         </p>
+
       </div>
     </div>
   </div>
@@ -75,22 +73,30 @@
 <script setup>
 import Navbar from '../components/Navbar.vue';
 import { ref, watch } from "vue";
-import { useRouter } from "vue-router";
 import Swal from "sweetalert2";
+import { useRouter } from "vue-router";
 
 const router = useRouter();
 
+// -------------------------------------------
+// STATE
+// -------------------------------------------
 const email = ref("");
 const password = ref("");
 
+// ERRORS
 const emailError = ref("");
 const passwordError = ref("");
 const serverError = ref("");
+
+// UI
 const isLoading = ref(false);
 
 const API_URL = "http://127.0.0.1:5000";
 
-// 🔥 LIVE CLEAR ERRORS
+// -------------------------------------------
+// LIVE ERROR CLEARING
+// -------------------------------------------
 watch(email, (v) => {
   if (v.includes("@")) emailError.value = "";
 });
@@ -99,46 +105,53 @@ watch(password, (v) => {
   if (v.length >= 6) passwordError.value = "";
 });
 
+// -------------------------------------------
+// HANDLE LOGIN
+// -------------------------------------------
 const handleLogin = async () => {
   emailError.value = "";
   passwordError.value = "";
   serverError.value = "";
 
-  let isValid = true;
+  let valid = true;
 
   if (!email.value.includes("@")) {
     emailError.value = "Please enter a valid email address.";
-    isValid = false;
+    valid = false;
   }
 
   if (password.value.length < 6) {
     passwordError.value = "Password must be at least 6 characters.";
-    isValid = false;
+    valid = false;
   }
 
-  if (!isValid) return;
+  if (!valid) return;
 
   isLoading.value = true;
 
   try {
-    const res = await fetch(`${API_URL}/api/login`, {
+    const response = await fetch(`${API_URL}/api/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        email: email.value,
+        email: email.value.trim(),
         password: password.value
       })
     });
 
-    const data = await res.json();
+    const data = await response.json();
 
-    if (!res.ok || !data.success) {
+    // Handle API errors
+    if (!response.ok || !data.success) {
       serverError.value = data.message || "Invalid email or password.";
       setTimeout(() => (serverError.value = ""), 3000);
+      isLoading.value = false;
       return;
     }
 
-    // Save Token/Details
+    // -------------------------------------------
+    // SAVE TOKEN + USER INFO
+    // -------------------------------------------
     localStorage.setItem("token", data.token);
     localStorage.setItem("role", data.user.role);
     localStorage.setItem("user_id", data.user.id);
@@ -153,15 +166,22 @@ const handleLogin = async () => {
       timer: 2000,
     });
 
-    if (data.user.role === "CANDIDATE") router.push("/candidate");
-    else if (data.user.role === "RECRUITER") router.push("/recruiter");
-    else router.push("/");
+    // -------------------------------------------
+    // REDIRECT ACCORDING TO ROLE
+    // -------------------------------------------
+    if (data.user.role === "CANDIDATE") {
+      router.push("/candidate");
+    } else if (data.user.role === "RECRUITER") {
+      router.push("/recruiter");
+    } else {
+      router.push("/");
+    }
 
   } catch (err) {
-    serverError.value = "Server error. Please try again.";
-  } finally {
-    isLoading.value = false;
+    serverError.value = "Server error. Please try again later.";
   }
+
+  isLoading.value = false;
 };
 </script>
 
@@ -173,7 +193,7 @@ const handleLogin = async () => {
   backdrop-filter: blur(10px);
 }
 
-/* Glassmorphism Card */
+/* Card */
 .login-card {
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
@@ -189,11 +209,7 @@ const handleLogin = async () => {
   box-shadow: 0 10px 25px rgba(0, 114, 255, 0.15);
 }
 
-/* Floating Labels */
-.form-floating > label {
-  padding-left: 12px;
-}
-
+/* Inputs */
 .form-control {
   height: 48px !important;
   font-size: 15px;
@@ -226,7 +242,7 @@ const handleLogin = async () => {
   box-shadow: 0 4px 14px rgba(0, 114, 255, 0.25);
 }
 
-/* Error shake */
+/* Shake animation */
 .is-invalid {
   border-color: #ff4d4f !important;
   animation: shake 0.2s ease-in-out;
