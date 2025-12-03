@@ -6,12 +6,10 @@
       <!-- Header -->
       <div class="text-center mb-5 fade-in">
         <h2 class="fw-bold text-primary mb-2">Available Job Listings</h2>
-        <p class="text-muted fs-5">
-          Find your next opportunity from top companies hiring today.
-        </p>
+        <p class="text-muted fs-5">Find your next opportunity from top companies hiring today.</p>
       </div>
 
-      <!-- Search and Filter -->
+      <!-- Search & Filter -->
       <div class="row mb-4 fade-in">
         <div class="col-md-8 mx-auto">
           <div class="d-flex flex-column flex-md-row gap-3">
@@ -23,11 +21,7 @@
             />
             <select v-model="selectedCategory" class="form-select rounded-4 shadow-sm">
               <option value="">All Categories</option>
-              <option>Software Development</option>
-              <option>Marketing</option>
-              <option>Design</option>
-              <option>Finance</option>
-              <option>Human Resources</option>
+              <option v-for="cat in categories" :key="cat">{{ cat }}</option>
             </select>
           </div>
         </div>
@@ -36,12 +30,13 @@
       <!-- Job Cards -->
       <div class="row g-4">
         <div
-          v-for="(job, index) in filteredJobs"
-          :key="index"
+          v-for="job in filteredJobs"
+          :key="job.job_id"
           class="col-md-6 col-lg-4 fade-in"
         >
           <div class="job-card bg-white p-4 rounded-4 shadow-sm h-100 d-flex flex-column justify-content-between">
             <div>
+              <!-- Header -->
               <div class="d-flex align-items-center mb-3">
                 <img
                   :src="job.logo"
@@ -55,8 +50,13 @@
                   <small class="text-muted">{{ job.company }}</small>
                 </div>
               </div>
-              <p class="text-secondary mb-3">{{ job.description }}</p>
+
+              <!-- Truncated description -->
+              <p class="text-secondary mb-3">
+                {{ truncate(job.description, 90) }}
+              </p>
             </div>
+
             <div>
               <div class="d-flex justify-content-between align-items-center">
                 <span class="badge bg-primary bg-opacity-10 text-primary px-3 py-2">
@@ -66,7 +66,19 @@
                   <i class="bi bi-geo-alt me-1"></i>{{ job.location }}
                 </small>
               </div>
-              <button class="btn btn-primary w-100 mt-3 rounded-4">
+
+              <!-- Actions -->
+              <button
+                class="btn btn-outline-primary w-100 mt-3 rounded-4"
+                @click="viewDetails(job.job_id)"
+              >
+                View Full Description
+              </button>
+
+              <button
+                class="btn btn-primary w-100 mt-2 rounded-4"
+                @click="applyForJob(job.job_id)"
+              >
                 Apply Now
               </button>
             </div>
@@ -84,15 +96,18 @@
 </template>
 
 <script setup>
-
-import Navbar from '../components/Navbar.vue';
+import Navbar from "../components/Navbar.vue";
 import { ref, computed, onMounted } from "vue";
+import { useRouter } from "vue-router";
 
-const searchQuery = ref("");
-const selectedCategory = ref("");
+const router = useRouter();
 
+/* -------------------------------------
+   Dummy Jobs (Replace later with API)
+-------------------------------------- */
 const jobs = ref([
   {
+    job_id: 1,
     title: "Frontend Developer",
     company: "TechNova Solutions",
     location: "Bangalore",
@@ -101,6 +116,7 @@ const jobs = ref([
     logo: "https://cdn-icons-png.flaticon.com/512/5968/5968705.png",
   },
   {
+    job_id: 2,
     title: "Digital Marketing Executive",
     company: "MarketX Media",
     location: "Mumbai",
@@ -109,6 +125,7 @@ const jobs = ref([
     logo: "https://cdn-icons-png.flaticon.com/512/5968/5968520.png",
   },
   {
+    job_id: 3,
     title: "UI/UX Designer",
     company: "Designify",
     location: "Remote",
@@ -117,6 +134,7 @@ const jobs = ref([
     logo: "https://cdn-icons-png.flaticon.com/512/5968/5968709.png",
   },
   {
+    job_id: 4,
     title: "Finance Analyst",
     company: "GrowCorp",
     location: "Delhi",
@@ -125,6 +143,7 @@ const jobs = ref([
     logo: "https://cdn-icons-png.flaticon.com/512/2331/2331941.png",
   },
   {
+    job_id: 5,
     title: "HR Manager",
     company: "PeopleFirst HR",
     location: "Pune",
@@ -134,18 +153,56 @@ const jobs = ref([
   },
 ]);
 
+/* -------------------------------------
+   Dynamic Filters
+-------------------------------------- */
+
+const categories = [...new Set(jobs.value.map((j) => j.category))];
+
+const searchQuery = ref("");
+const selectedCategory = ref("");
+
 const filteredJobs = computed(() => {
   return jobs.value.filter((job) => {
     const matchesSearch =
       job.title.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
       job.company.toLowerCase().includes(searchQuery.value.toLowerCase());
+
     const matchesCategory =
       !selectedCategory.value || job.category === selectedCategory.value;
+
     return matchesSearch && matchesCategory;
   });
 });
 
-// Scroll animation setup
+/* -------------------------------------
+   Utility Functions
+-------------------------------------- */
+
+const truncate = (text, limit) =>
+  text.length > limit ? text.substring(0, limit) + "..." : text;
+
+/* -------------------------------------
+   Actions
+-------------------------------------- */
+
+const viewDetails = (id) => {
+  router.push(`/job/${id}`);
+};
+
+const applyForJob = (id) => {
+  const isLoggedIn = localStorage.getItem("token");
+
+  if (!isLoggedIn) {
+    router.push("/login"); // Login required
+  } else {
+    router.push(`/apply/${id}`);
+  }
+};
+
+/* -------------------------------------
+   Scroll Reveal Animations
+-------------------------------------- */
 onMounted(() => {
   const fadeEls = document.querySelectorAll(".fade-in");
   const observer = new IntersectionObserver(
@@ -179,7 +236,7 @@ onMounted(() => {
   transform: translateY(0);
 }
 
-/* Job Card Styling */
+/* Job Card */
 .job-card {
   transition: all 0.3s ease-in-out;
 }
@@ -188,9 +245,7 @@ onMounted(() => {
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
 }
 
-button.btn {
-  transition: background 0.3s;
-}
+/* Button */
 button.btn:hover {
   background-color: #0a58ca;
 }

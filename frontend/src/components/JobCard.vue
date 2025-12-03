@@ -1,17 +1,32 @@
 <template>
-  <div class="job-card glass-card p-4 h-100 d-flex flex-column">
+  <div class="job-card glass-card p-4 d-flex flex-column h-100">
 
-    <!-- HEADER -->
-    <div class="d-flex justify-content-between align-items-start mb-2">
-      <div>
+    <!-- TITLE + COMPANY + LOCATION -->
+    <div class="d-flex justify-content-between align-items-start mb-3">
+
+      <!-- Avatar -->
+      <div class="job-avatar">
+        <img :src="generateJobAvatar(job.job_title)" />
+      </div>
+
+      <div class="flex-grow-1 ms-3">
+
+        <!-- Title -->
         <h5 class="fw-bold text-dark mb-1">{{ job.job_title }}</h5>
 
+        <!-- Company -->
+        <div class="small text-primary fw-semibold mb-1">
+          <i class="bi bi-building me-1"></i>
+          {{ job.company || "Unknown Company" }}
+        </div>
+
+        <!-- Location -->
         <div class="small text-muted">
-          <i class="bi bi-geo-alt me-1 text-primary"></i>
-          {{ job.location || "Location not specified" }}
+          <i class="bi bi-geo-alt me-1 text-primary"></i>{{ job.location }}
         </div>
       </div>
 
+      <!-- Strong Match Tag (Optional) -->
       <span
         v-if="strongMatch"
         class="badge rounded-pill bg-success-subtle text-success fw-semibold small-pill"
@@ -20,40 +35,32 @@
       </span>
     </div>
 
-    <!-- JOB META -->
+    <!-- META -->
     <div class="small text-muted mb-1">
-      <span class="me-2">
-        <i class="bi bi-briefcase me-1 text-primary"></i>
-        {{ job.job_type }}
-      </span>
-
-      <span>
-        <i class="bi bi-clock-history me-1 text-primary"></i>
-        Posted {{ relativeDate(job.start_date) }}
-      </span>
+      <i class="bi bi-briefcase me-1 text-primary"></i>{{ job.job_type }}
+      •
+      <i class="bi bi-clock-history ms-1 me-1 text-primary"></i>{{ relativeDate(job.start_date) }}
     </div>
 
     <div class="small text-muted mb-1">
       <i class="bi bi-person-workspace me-1 text-primary"></i>
-      Experience:
-      <span class="fw-semibold">{{ formatExperience(job.experience) }}</span>
+      Experience: <span class="fw-semibold">{{ formatExperience(job.experience) }}</span>
     </div>
 
     <div class="small text-muted mb-2">
       <i class="bi bi-calendar-event me-1 text-primary"></i>
-      End Date:
-      <span class="fw-semibold">{{ formatReadableDate(job.end_date) }}</span>
+      End Date: {{ formatReadableDate(job.end_date) }}
     </div>
 
     <!-- DESCRIPTION -->
-    <p class="job-snippet text-secondary small flex-grow-1">
-      {{ shortDescription }}
+    <p class="job-snippet text-secondary small mt-2 mb-3">
+      {{ shortDesc }}
     </p>
 
     <!-- SKILLS -->
     <div class="mb-3 d-flex flex-wrap gap-1">
       <span
-        v-for="skill in derivedSkills"
+        v-for="skill in skills"
         :key="skill"
         class="badge rounded-pill bg-light text-primary border small-pill"
       >
@@ -62,32 +69,32 @@
     </div>
 
     <!-- ACTIONS -->
-    <div class="d-flex justify-content-between align-items-center mt-2">
+    <div class="d-flex justify-content-between align-items-center mt-auto">
       <button
         class="btn btn-sm btn-outline-primary rounded-pill"
-        @click="$emit('view-details', job)"
+        @click="$emit('view', job)"
       >
         View Details
       </button>
 
-      <div class="d-flex align-items-center gap-2">
+      <div class="d-flex gap-2">
 
-        <!-- SAVE UNSAVE -->
+        <!-- SAVE -->
         <button
           class="btn btn-sm rounded-circle favorite-btn"
-          :class="{ 'favorite-btn-active': isSaved }"
-          @click="$emit('toggle-save', job)"
+          :class="{ 'favorite-btn-active': saved }"
+          @click="$emit('save', job)"
         >
-          <i :class="isSaved ? 'bi bi-bookmark-fill' : 'bi bi-bookmark'"></i>
+          <i :class="saved ? 'bi bi-bookmark-fill' : 'bi bi-bookmark'"></i>
         </button>
 
-        <!-- APPLY / TEST DONE / APPLIED -->
+        <!-- APPLY -->
         <button
           class="btn btn-sm btn-success rounded-pill"
-          :disabled="isApplied || testDone"
+          :disabled="applied || testDone"
           @click="$emit('apply', job)"
         >
-          {{ isApplied ? "Applied" : testDone ? "Test Done" : "Apply" }}
+          {{ applied ? "Applied" : testDone ? "Test Done" : "Apply" }}
         </button>
       </div>
     </div>
@@ -96,112 +103,119 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
-import { marked } from "marked";
-
 const props = defineProps({
-  job: { type: Object, required: true },
-  isSaved: { type: Boolean, default: false },
-  isApplied: { type: Boolean, default: false },
-  testDone: { type: Boolean, default: false },
-  candidateSkills: { type: Array, default: () => [] },
-  allSkills: { type: Array, default: () => [] }
+  job: Object,
+  saved: Boolean,
+  applied: Boolean,
+  testDone: Boolean,
+  strongMatch: Boolean,
+  skills: Array,
 });
 
-defineEmits(["toggle-save", "apply", "view-details"]);
+const emit = defineEmits(["view", "save", "apply"]);
 
-// --- Compute Skills from Job Description ---
-const derivedSkills = computed(() => {
-  const text = (props.job.description || "").toLowerCase();
-  const set = new Set();
-  props.allSkills.forEach((s) => {
-    if (text.includes(s.toLowerCase())) set.add(s);
-  });
-  return Array.from(set).slice(0, 6);
-});
+function getInitialsFromTitle(title) {
+  if (!title) return "JD";
+  const parts = title.trim().split(" ");
+  if (parts.length === 1) {
+    return (parts[0][0] + (parts[0][1] || "D")).toUpperCase();
+  }
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
 
-// --- Strong Match Logic ---
-const strongMatch = computed(() => {
-  const intersection = derivedSkills.value.filter((s) =>
-    props.candidateSkills.includes(s)
-  );
-  return intersection.length >= 2;
-});
+function generateJobAvatar(title) {
+  const initials = getInitialsFromTitle(title);
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=3864f2&color=fff&rounded=true`;
+}
 
-// --- Format Experience ---
-const formatExperience = (exp) => {
-  if (!exp && exp !== 0) return "Not specified";
+function shortDesc(desc) {
+  if (!desc) return "No description.";
+  const clean = desc.replace(/[#*_`]/g, " ").replace(/\s+/g, " ").trim();
+  return clean.length <= 140 ? clean : clean.slice(0, 140) + "...";
+}
+
+function formatExperience(exp) {
   const n = Number(exp);
-  if (n === 0) return "Fresher (0 yrs)";
+  if (isNaN(n)) return "Not specified";
+  if (n === 0) return "Fresher";
   if (n === 1) return "1 year";
   return `${n} years`;
-};
+}
 
-// --- Relative Date ---
-const relativeDate = (raw) => {
-  if (!raw) return "date unknown";
-  const d = new Date(raw);
-  if (isNaN(d)) return "date unknown";
+function relativeDate(dateStr) {
+  if (!dateStr) return "Unknown";
+  const d = new Date(dateStr);
+  const diff = (Date.now() - d.getTime()) / (1000 * 3600 * 24);
+  const days = Math.floor(diff);
+  if (days <= 0) return "today";
+  if (days === 1) return "1 day ago";
+  if (days < 7) return `${days} days ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 4) return `${weeks} weeks ago`;
+  const months = Math.floor(days / 30);
+  return `${months} months ago`;
+}
 
-  const diff = (new Date() - d) / (1000 * 60 * 60 * 24);
-  if (diff <= 0) return "today";
-  if (diff < 1) return "today";
-  if (diff < 2) return "1 day ago";
-  if (diff < 7) return `${Math.floor(diff)} days ago`;
-  const w = Math.floor(diff / 7);
-  if (w < 4) return `${w} weeks ago`;
-  return `${Math.floor(diff / 30)} months ago`;
-};
-
-const formatReadableDate = (raw) => {
+function formatReadableDate(raw) {
   if (!raw) return "Not specified";
-  return new Date(raw).toLocaleDateString(undefined, {
+  const d = new Date(raw);
+  return d.toLocaleDateString(undefined, {
     day: "2-digit",
     month: "short",
-    year: "numeric",
+    year: "numeric"
   });
-};
-
-const shortDescription = computed(() => {
-  let d = props.job.description || "";
-  d = d.replace(/[#*_`>-]/g, " ")
-    .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
-    .replace(/\s+/g, " ")
-    .trim();
-  return d.length > 140 ? d.slice(0, 140) + "..." : d;
-});
+}
 </script>
 
 <style scoped>
+/* exact same as candidate dashboard */
 .job-card {
-  border-radius: 1.4rem;
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(220, 227, 240, 0.65);
+  backdrop-filter: blur(14px);
+  transition: 0.28s ease;
 }
+
 .job-card:hover {
   transform: translateY(-6px);
-  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+  box-shadow: 0 22px 46px rgba(25, 40, 70, 0.22);
 }
-.small-pill {
-  font-size: 0.75rem;
-  padding: 4px 10px;
-}
-.job-snippet {
-  line-height: 1.4;
-}
-.favorite-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.55);
-  background: white;
+
+.job-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #eef6ff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.1rem;
 }
+
+.job-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.job-snippet {
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: #4a5568;
+}
+
+.favorite-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  background: #fff;
+}
+
 .favorite-btn-active {
   background: #e0f2fe;
-  color: #0ea5e9;
   border-color: transparent;
+  color: #0284c7;
 }
 </style>
