@@ -61,7 +61,7 @@
         <div v-else>
           <div v-if="filteredJobs.length" class="row g-4 fade-in">
 
-            <div v-for="job in filteredJobs" :key="job.job_id" class="col-md-6 col-lg-4">
+            <div v-for="job in filteredJobs" :key="job.job_id" class="col-md-6 col-lg-6">
 
               <!-- MODERN JOB CARD -->
               <div class="job-card-modern glass-card p-4 d-flex flex-column h-100">
@@ -168,6 +168,7 @@ const statusFilter = ref("");
 const stages = [
   { label: "Applied", icon: "bi bi-send" },
   { label: "Shortlisted", icon: "bi bi-stars" },
+  { label: "Interview Scheduled", icon: "bi bi-calendar-event" },
   { label: "Interviewed", icon: "bi bi-pencil-square" },
   { label: "Offered", icon: "bi bi-briefcase" },
   { label: "Final", icon: "bi bi-flag" },
@@ -193,22 +194,42 @@ function normalizeStatus(status) {
 }
 
 function currentStageIndex(job) {
-  switch (job.status) {
-    case "Applied": return 0;
-    case "Shortlisted": return 1;
-    case "Test Completed":
-    case "HR Review":
-    case "Interviewed": return 2;
-    case "Offered": return 3;
-    case "Selected":
-    case "Rejected": return 4;
-    default: return 0;
+  const status = (job.status || "").toUpperCase();
+
+  switch (status) {
+    case "APPLIED":
+      return 0;
+
+    case "SHORTLISTED":
+      return 1;
+
+    case "INTERVIEW_SCHEDULED":
+      return 2;
+
+    case "TEST_COMPLETED":
+    case "HR_REVIEW":
+    case "INTERVIEWED":
+      return 3;
+
+    case "OFFERED":
+      return 4;
+
+    case "SELECTED":
+    case "REJECTED":
+      return 5;
+
+    default:
+      return 0;
   }
 }
 
+
+
 function isFinalStage(job, stage) {
-  return stage.label === "Final" && ["Selected", "Rejected"].includes(job.status);
+  const s = (job.status || "").toUpperCase();
+  return stage.label === "Final" && (s === "SELECTED" || s === "REJECTED");
 }
+
 
 function formatReadableDate(date) {
   if (!date) return "N/A";

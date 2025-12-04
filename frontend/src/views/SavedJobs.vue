@@ -317,8 +317,6 @@
         </div>
       </div>
     </div>
-
-    <FloatingChatBot />
   </div>
 </template>
 
@@ -330,7 +328,6 @@
 import { ref, reactive, computed, onMounted, nextTick } from "vue";
 import { Modal } from "bootstrap";
 import CandidateNavbar from "../components/CandidateNavbar.vue";
-import FloatingChatBot from "../components/ChatBot.vue";
 import { marked } from "marked";
 
 /* -------------------------------------------------------

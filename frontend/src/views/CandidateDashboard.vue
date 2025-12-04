@@ -494,7 +494,12 @@
             <h5 class="mb-0 fw-bold">{{ chatbotJob?.job_title }}</h5>
             <p class="small text-muted mb-0">{{ chatbotJob?.company }}</p>
           </div>
-
+          <button
+            class="btn btn-sm btn-outline-primary rounded-pill me-2"
+            @click="clearChatConversation"
+          >
+            <i class="bi bi-trash"></i> Clear Chat
+          </button>
           <button class="btn-close ms-auto" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
 
@@ -534,12 +539,8 @@
   </div>
 </div>
 
-
-
-
   </div>
 </template>
-
 
 <script setup>
 /* -------------------------------------------------------
@@ -551,7 +552,6 @@ import Swal from "sweetalert2";
 import { marked } from "marked";
 
 import CandidateNavbar from "../components/CandidateNavbar.vue";
-import FloatingChatBot from "../components/ChatBot.vue";
 
 /* -------------------------------------------------------
    Constants / Base State
@@ -686,6 +686,17 @@ function runToastAction(t) {
 const showSuccessToast = (title, msg) => showToast({ type: "success", title, message: msg });
 const showErrorToast = (title, msg) => showToast({ type: "error", title, message: msg, duration: 0 });
 const showInfoToast = (title, msg) => showToast({ type: "info", title, message: msg });
+
+/* -------------------------------------------------------
+   Persistence keys (per-user)
+   We'll namespace localStorage keys to avoid cross-user collisions.
+------------------------------------------------------- */
+function getUserKeyPrefix() {
+  // prefer stable unique value if your app stores it (email, user_id). fallbacks to firstname.
+  const email = localStorage.getItem("email") || localStorage.getItem("user_email");
+  const uid = email || localStorage.getItem("firstname") || "anon";
+  return `candidate_${uid}_`;
+}
 
 /* -------------------------------------------------------
    Resume Parsing One-Time Notification
@@ -823,9 +834,9 @@ const baseFilteredJobs = computed(() => {
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase();
     list = list.filter(j =>
-      j.job_title.toLowerCase().includes(q) ||
-      j.location.toLowerCase().includes(q) ||
-      j.description.toLowerCase().includes(q)
+      (j.job_title || "").toLowerCase().includes(q) ||
+      (j.location || "").toLowerCase().includes(q) ||
+      (j.description || "").toLowerCase().includes(q)
     );
   }
 
@@ -838,7 +849,7 @@ const baseFilteredJobs = computed(() => {
 
   if (locationFilter.value) {
     const loc = locationFilter.value.toLowerCase();
-    list = list.filter(j => j.location.toLowerCase().includes(loc));
+    list = list.filter(j => (j.location || "").toLowerCase().includes(loc));
   }
 
   if (selectedSkills.value.length) {
@@ -855,10 +866,10 @@ const filteredJobs = computed(() => {
 
   switch (sortOption.value) {
     case "LATEST":
-      list.sort((a, b) => b.start_date.localeCompare(a.start_date));
+      list.sort((a, b) => (b.start_date || "").localeCompare(a.start_date || ""));
       break;
     case "EARLIEST":
-      list.sort((a, b) => a.start_date.localeCompare(b.start_date));
+      list.sort((a, b) => (a.start_date || "").localeCompare(b.start_date || ""));
       break;
     case "EXP_ASC":
       list.sort((a, b) => Number(a.experience) - Number(b.experience));
@@ -890,6 +901,8 @@ function resetFilters() {
 
 /* -------------------------------------------------------
    Save / Apply Jobs
+   - We fetch saved/applied from server for canonical state
+   - Save local copy only as a UI optimization
 ------------------------------------------------------- */
 function isSaved(job) {
   return savedJobIds.value.has(job.job_id);
@@ -906,23 +919,25 @@ async function toggleSave(job) {
     return;
   }
 
-  if (isSaved(job)) {
-    // remove saved
-    await fetch(`${API_BASE}/save-job/${job.job_id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    savedJobIds.value.delete(job.job_id);
-    showInfoToast("Removed", "Job removed from saved.");
-  } else {
-    // save job
-    await fetch(`${API_BASE}/save-job`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ job_id: job.job_id })
-    });
-    savedJobIds.value.add(job.job_id);
-    showSuccessToast("Saved", "Job added to saved list.");
+  try {
+    if (isSaved(job)) {
+      await fetch(`${API_BASE}/save-job/${job.job_id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      savedJobIds.value.delete(job.job_id);
+      showInfoToast("Removed", "Job removed from saved.");
+    } else {
+      await fetch(`${API_BASE}/save-job`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ job_id: job.job_id })
+      });
+      savedJobIds.value.add(job.job_id);
+      showSuccessToast("Saved", "Job added to saved list.");
+    }
+  } catch (err) {
+    showErrorToast("Error", "Failed to update saved job.");
   }
 
   persistLocalState();
@@ -930,21 +945,25 @@ async function toggleSave(job) {
 }
 
 function persistLocalState() {
-  localStorage.setItem("candidate_saved_jobs", JSON.stringify([...savedJobIds.value]));
-  localStorage.setItem("candidate_applied_jobs", JSON.stringify([...appliedJobIds.value]));
+  try {
+    const prefix = getUserKeyPrefix();
+    localStorage.setItem(prefix + "candidate_saved_jobs", JSON.stringify([...savedJobIds.value]));
+    localStorage.setItem(prefix + "candidate_applied_jobs", JSON.stringify([...appliedJobIds.value]));
+  } catch {}
 }
 
 function restoreLocalState() {
   try {
-    const saved = JSON.parse(localStorage.getItem("candidate_saved_jobs"));
-    const applied = JSON.parse(localStorage.getItem("candidate_applied_jobs"));
-    if (saved) savedJobIds.value = new Set(saved);
-    if (applied) appliedJobIds.value = new Set(applied);
+    const prefix = getUserKeyPrefix();
+    const saved = JSON.parse(localStorage.getItem(prefix + "candidate_saved_jobs") || "null");
+    const applied = JSON.parse(localStorage.getItem(prefix + "candidate_applied_jobs") || "null");
+    if (Array.isArray(saved)) savedJobIds.value = new Set(saved);
+    if (Array.isArray(applied)) appliedJobIds.value = new Set(applied);
   } catch {}
 }
 
 /* -------------------------------------------------------
-   Fetching Jobs
+   Fetching Jobs & server-backed saved/applied lists
 ------------------------------------------------------- */
 async function loadJobs() {
   loading.value = true;
@@ -956,6 +975,7 @@ async function loadJobs() {
     jobs.value = data.jobs || [];
   } catch {
     jobs.value = [];
+    showErrorToast("Error", "Failed to fetch jobs.");
   } finally {
     loading.value = false;
     refreshStats();
@@ -968,10 +988,30 @@ async function fetchSavedJobs() {
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
     });
     const data = await res.json();
-    if (data.success) {
-      savedJobIds.value = new Set(data.jobs.map(j => j.job_id));
+    if (data.success && Array.isArray(data.jobs)) {
+      // jobs from API may contain job_id as number or string
+      savedJobIds.value = new Set(data.jobs.map(j => Number(j.job_id)));
+      persistLocalState();
+      refreshStats();
     }
   } catch {}
+}
+
+async function fetchAppliedJobs() {
+  // canonical source of applied status
+  try {
+    const res = await fetch(`${API_BASE}/applied-jobs`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+    });
+    const data = await res.json();
+    if (data.success && Array.isArray(data.applications)) {
+      appliedJobIds.value = new Set(data.applications.map(a => Number(a.job_id)));
+      persistLocalState();
+      refreshStats();
+    }
+  } catch (err) {
+    // don't fail hard: keep local state if available
+  }
 }
 
 /* -------------------------------------------------------
@@ -1002,7 +1042,7 @@ const jobDescriptionHtml = computed(() =>
 );
 
 /* -------------------------------------------------------
-   Credibility Test System
+   Credibility Test System (AUTO-APPLY mode)
 ------------------------------------------------------- */
 const testJob = ref({});
 const testQuestions = ref([]);
@@ -1036,7 +1076,7 @@ function clearTestState() {
   testInProgress.value = false;
   testSubmitting.value = false;
   showCorrect.value = false;
-  if (timer) clearInterval(timer);
+  if (timer) { clearInterval(timer); timer = null; }
 }
 
 async function onApplyClick(job) {
@@ -1046,6 +1086,8 @@ async function onApplyClick(job) {
   }
 
   if (testHistory[job.job_id]) {
+    // In Auto-Apply mode we should not block if test done but not auto-applied,
+    // however Option A means backend auto-applies. If backend hasn't, user can be allowed to re-apply:
     showInfoToast("Test done", "You already completed the test for this job.");
     return;
   }
@@ -1068,6 +1110,14 @@ async function startCredibilityTest(job) {
 
     const data = await res.json();
 
+    // Defensive: check structure
+    if (!data || !Array.isArray(data.questions)) {
+      testQuestions.value = [];
+      testLoading.value = false;
+      showErrorToast("Error", data.message || "No test available for this job.");
+      return;
+    }
+
     testQuestions.value = data.questions.map((q) => ({
       question: q.question,
       options: q.options,
@@ -1083,9 +1133,9 @@ async function startCredibilityTest(job) {
       if (timeLeft.value <= 0) submitTest();
     }, 1000);
 
-  } catch {
-    showErrorToast("Error", "Failed to load test.");
+  } catch (err) {
     testLoading.value = false;
+    showErrorToast("Error", "Failed to load test.");
   }
 }
 
@@ -1115,12 +1165,12 @@ async function submitTest() {
 
   let correct = 0;
   testQuestions.value.forEach((q, i) => {
-    if ((answers.value[i] || "").toUpperCase() === q.correct_option.toUpperCase()) {
+    if ((answers.value[i] || "").toUpperCase() === (q.correct_option || "").toUpperCase()) {
       correct++;
     }
   });
 
-  const score = Math.round((correct / testQuestions.value.length) * 100);
+  const score = Math.round((correct / (testQuestions.value.length || 1)) * 100);
 
   const token = localStorage.getItem("token");
 
@@ -1136,30 +1186,65 @@ async function submitTest() {
 
     const data = await res.json();
 
-    if (data.status === "APPLIED") {
-      appliedJobIds.value.add(testJob.value.job_id);
+    // Server returns:
+    // { success: True, message: "...", score: score, status: "APPLIED" } when auto-applied
+    // or success + status: "TEST_COMPLETED" (if backend doesn't auto-apply)
+    if (data && data.success) {
+      // If server confirmed APPLIED, reflect that in UI
+      if (data.status === "APPLIED") {
+        appliedJobIds.value.add(testJob.value.job_id);
+      } else if (data.status === "TEST_COMPLETED") {
+        // In Auto-Apply mode we prefer to attempt to call apply endpoint to ensure state
+        try {
+          const applyRes = await fetch(`${API_BASE}/job-apply`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({ job_id: testJob.value.job_id })
+          });
+          const applyData = await applyRes.json();
+          if (applyData && applyData.success) {
+            appliedJobIds.value.add(testJob.value.job_id);
+          }
+        } catch {}
+      }
     } else {
-      await fetch(`${API_BASE}/job-apply`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ job_id: testJob.value.job_id })
-      });
-      appliedJobIds.value.add(testJob.value.job_id);
+      // fallback: try apply endpoint (best effort)
+      try {
+        const fallback = await fetch(`${API_BASE}/job-apply`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ job_id: testJob.value.job_id })
+        });
+        const fallbackData = await fallback.json();
+        if (fallbackData && fallbackData.success) {
+          appliedJobIds.value.add(testJob.value.job_id);
+        }
+      } catch {}
     }
 
+    // Mark test completed locally (so button shows "Test Done" briefly)
     testHistory[testJob.value.job_id] = true;
+
     persistLocalState();
     refreshStats();
 
     showSuccessToast("Test submitted", `Score: ${score}%`);
-  } catch {
+  } catch (err) {
     showErrorToast("Error", "Submission failed.");
+  } finally {
+    testSubmitting.value = false;
+    // hide modal after a short delay
+    setTimeout(() => {
+      clearTestState();
+      credibilityModalInstance.hide();
+    }, 700);
   }
-
-  setTimeout(() => credibilityModalInstance.hide(), 800);
 }
 
 function cancelTest() {
@@ -1203,14 +1288,19 @@ function setTab(key) {
 }
 
 /* -------------------------------------------------------
-   Lifecycle
+   Chat (unchanged)
 ------------------------------------------------------- */
 onMounted(async () => {
+  // restore quick UI state first (non-authoritative)
   restoreLocalState();
-  await loadJobs();
-  await fetchSavedJobs();
-  refreshStats();
 
+  // load jobs, then canonical saved & applied from server
+  await loadJobs();
+
+  // fetch saved & applied lists from server (canonical)
+  await Promise.all([fetchSavedJobs(), fetchAppliedJobs()]);
+
+  refreshStats();
   nextTick(() => checkResumeStatusOnce());
 
   jobDetailsModalInstance = new Modal(jobDetailsModalRef.value);
@@ -1218,8 +1308,9 @@ onMounted(async () => {
     backdrop: "static",
     keyboard: false
   });
-});
 
+  chatbotModalInstance = new Modal(chatbotModalRef.value);
+});
 
 function scrollChat() {
   nextTick(() => {
@@ -1229,20 +1320,49 @@ function scrollChat() {
   });
 }
 
-function openChatForJob(job) {
+async function openChatForJob(job) {
   chatbotJob.value = job;
+  chatMessages.value = [];
+  botTyping.value = false;
 
-  chatMessages.value = [
-    {
+  chatbotModalInstance.show();
+
+  const token = localStorage.getItem("token");
+
+  // Fetch Chat History
+  try {
+    const res = await fetch(`${API_BASE}/chatbot/history/${job.job_id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    const data = await res.json();
+
+    if (data.success && Array.isArray(data.history) && data.history.length) {
+      chatMessages.value = data.history.map((m, idx) => ({
+        id: idx,
+        sender: m.role === "user" ? "user" : "ai",
+        text: m.content
+      }));
+    } else {
+      // First message
+      chatMessages.value = [{
+        id: Date.now(),
+        sender: "ai",
+        text: `Hello! 👋<br/>Ask me anything about <b>${job.job_title}</b> at <b>${job.company}</b>.`
+      }];
+    }
+
+  } catch {
+    chatMessages.value = [{
       id: Date.now(),
       sender: "ai",
       text: `Hello! 👋<br/>Ask me anything about <b>${job.job_title}</b> at <b>${job.company}</b>.`
-    }
-  ];
+    }];
+  }
 
-  chatbotModalInstance.show();
   scrollChat();
 }
+
 
 async function sendChatMsg() {
   if (!chatInput.value.trim()) return;
@@ -1254,38 +1374,99 @@ async function sendChatMsg() {
     text: chatInput.value
   });
 
-  const userMessage = chatInput.value;
+  const userQuery = chatInput.value;
   chatInput.value = "";
   scrollChat();
 
-  // Typing animation
   botTyping.value = true;
 
-  setTimeout(async () => {
-    // TODO replace with backend AI API
-    const botResponse = `
-      Here's what I found about <b>${chatbotJob.value.job_title}</b>:<br/><br>
-      • The company: <b>${chatbotJob.value.company}</b><br>
-      • Experience: ${chatbotJob.value.experience} yrs<br>
-      • Location: ${chatbotJob.value.location}<br><br>
-      Ask more questions if you want!
-    `;
+  try {
+    const token = localStorage.getItem("token");
 
+    const res = await fetch(`${API_BASE}/chatbot/response`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        job_id: chatbotJob.value.job_id,
+        query: userQuery
+      })
+    });
+
+    const data = await res.json();
     botTyping.value = false;
 
+    if (data && data.success) {
+      chatMessages.value.push({
+        id: Date.now() + 1,
+        sender: "ai",
+        text: data.response
+      });
+    } else {
+      chatMessages.value.push({
+        id: Date.now() + 1,
+        sender: "ai",
+        text: "⚠️ Something went wrong, please try again."
+      });
+    }
+
+  } catch (err) {
+    botTyping.value = false;
     chatMessages.value.push({
       id: Date.now() + 1,
       sender: "ai",
-      text: botResponse
+      text: "⚠️ Server error, please try again."
     });
+  }
 
-    scrollChat();
-  }, 900);
+  scrollChat();
 }
 
-onMounted(() => {
-  chatbotModalInstance = new Modal(chatbotModalRef.value);
-});
+async function clearChatConversation() {
+  if (!chatbotJob.value) return;
+
+  const confirm = await Swal.fire({
+    title: "Clear Chat?",
+    text: "This will permanently remove all conversation for this job.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Yes, clear it",
+    cancelButtonText: "Cancel"
+  });
+
+  if (!confirm.isConfirmed) return;
+
+  const token = localStorage.getItem("token");
+
+  try {
+    await fetch(`${API_BASE}/chatbot/clear`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ job_id: chatbotJob.value.job_id })
+    });
+
+    // Reset local UI
+    chatMessages.value = [
+      {
+        id: Date.now(),
+        sender: "ai",
+        text: `Chat reset. 👋<br/>Ask me anything about <b>${chatbotJob.value.job_title}</b> at <b>${chatbotJob.value.company}</b>.`
+      }
+    ];
+
+    botTyping.value = false;
+    scrollChat();
+
+  } catch (err) {
+    console.error(err);
+    showErrorToast("Error", "Failed to clear chat.");
+  }
+}
 
 </script>
 
@@ -1836,6 +2017,10 @@ onMounted(() => {
   box-shadow: 0 6px 16px rgba(59,130,246,0.4);
 }
 
+.chatbot-header button {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+}
 
 
 </style>
