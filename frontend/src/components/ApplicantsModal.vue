@@ -382,10 +382,16 @@ const openDetails = (user) => {
   selectedCandidate.value = user;
 
   nextTick(() => {
-    if (!bsDetailsModal) bsDetailsModal = new Modal(detailsModalRoot.value);
+    if (!bsDetailsModal) {
+      bsDetailsModal = new Modal(detailsModalRoot.value, {
+        backdrop: "static",
+        keyboard: false
+      });
+    }
     bsDetailsModal.show();
   });
 };
+
 
 const hideDetailsModal = () => {
   if (bsDetailsModal) bsDetailsModal.hide();
@@ -449,10 +455,16 @@ const showModal = async (job) => {
   await loadApplicants(job.job_id);
 
   nextTick(() => {
-    if (!bsModal) bsModal = new Modal(modalRoot.value);
+    if (!bsModal) {
+      bsModal = new Modal(modalRoot.value, {
+        backdrop: "static",
+        keyboard: false
+      });
+    }
     bsModal.show();
   });
 };
+
 
 const hideModal = () => {
   if (bsModal) bsModal.hide();
