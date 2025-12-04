@@ -383,7 +383,6 @@
 
           <div class="modal-header border-0">
             <h5 class="modal-title fw-bold">Credibility Test</h5>
-            <button type="button" class="btn-close" @click="cancelTest"></button>
           </div>
 
           <div class="modal-body">
@@ -395,7 +394,7 @@
               <div>
                 <small class="text-muted">Question</small>
                 <div class="fw-semibold">
-                  #{{ currentQIndex + 1 }} / {{ testQuestions.length }}
+                  {{ currentQIndex + 1 }} / {{ testQuestions.length }}
                 </div>
               </div>
               <div>
@@ -451,13 +450,6 @@
                   @click="nextQuestion"
                 >
                   Next
-                </button>
-
-                <button
-                  class="btn btn-sm btn-danger rounded-pill"
-                  @click="cancelTest"
-                >
-                  Cancel
                 </button>
 
                 <button
@@ -1171,6 +1163,11 @@ async function submitTest() {
   });
 
   const score = Math.round((correct / (testQuestions.value.length || 1)) * 100);
+  
+  // When time ends
+  if (timeLeft.value <= 0) {
+    submitTest();  // modal closes ONLY after submit
+  }
 
   const token = localStorage.getItem("token");
 
@@ -1247,11 +1244,6 @@ async function submitTest() {
   }
 }
 
-function cancelTest() {
-  clearTestState();
-  credibilityModalInstance.hide();
-}
-
 /* -------------------------------------------------------
    Avatar From Job Title
 ------------------------------------------------------- */
@@ -1291,26 +1283,26 @@ function setTab(key) {
    Chat (unchanged)
 ------------------------------------------------------- */
 onMounted(async () => {
-  // restore quick UI state first (non-authoritative)
   restoreLocalState();
-
-  // load jobs, then canonical saved & applied from server
   await loadJobs();
-
-  // fetch saved & applied lists from server (canonical)
   await Promise.all([fetchSavedJobs(), fetchAppliedJobs()]);
 
   refreshStats();
   nextTick(() => checkResumeStatusOnce());
 
-  jobDetailsModalInstance = new Modal(jobDetailsModalRef.value);
+  jobDetailsModalInstance = new Modal(jobDetailsModalRef.value, {
+    backdrop: "static",
+    keyboard: false
+  });
+
   credibilityModalInstance = new Modal(credibilityModalRef.value, {
     backdrop: "static",
     keyboard: false
   });
 
-  chatbotModalInstance = new Modal(chatbotModalRef.value);
+  chatbotModalInstance = new Modal(chatbotModalRef.value)
 });
+
 
 function scrollChat() {
   nextTick(() => {

@@ -227,7 +227,7 @@
           </div>
 
           <div class="modal-footer border-0">
-            <button class="btn btn-secondary rounded-pill" data-bs-dismiss="modal">Cancel</button>
+            <button class="btn btn-secondary rounded-pill" :disabled="creatingJob" data-bs-dismiss="modal">Cancel</button>
             <button class="btn btn-primary rounded-pill" :disabled="creatingJob" @click="createJob">
               <span v-if="creatingJob" class="spinner-border spinner-border-sm me-2"></span>
               {{ creatingJob ? "Creating..." : "Create Job" }}
@@ -428,16 +428,33 @@ const debouncedFilter = debounce(() => {
 
 // open modals
 onMounted(() => {
-  // init modals
   nextTick(() => {
-    if (addJobModalRef.value) addJobModal = new Modal(addJobModalRef.value);
-    if (editJobModalRef.value) editJobModal = new Modal(editJobModalRef.value);
-    if (fullDescModalRef.value) fullDescModalInstance = new Modal(fullDescModalRef.value);
+    if (addJobModalRef.value) {
+      addJobModal = new Modal(addJobModalRef.value, {
+        backdrop: "static",
+        keyboard: false
+      });
+    }
+
+    if (editJobModalRef.value) {
+      editJobModal = new Modal(editJobModalRef.value, {
+        backdrop: "static",
+        keyboard: false
+      });
+    }
+
+    if (fullDescModalRef.value) {
+      fullDescModalInstance = new Modal(fullDescModalRef.value, {
+        backdrop: "static",
+        keyboard: false
+      });
+    }
   });
 
   loadJobs();
   loadRecruiterStats();
 });
+
 
 async function loadJobs() {
   try {
@@ -715,6 +732,8 @@ function generateJobAvatar(title) {
 
 // expose for template
 const getShortDescription = (job) => renderExcerpt(job.description);
+
+
 
 </script>
 
