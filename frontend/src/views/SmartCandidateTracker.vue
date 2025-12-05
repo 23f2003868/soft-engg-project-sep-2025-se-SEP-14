@@ -8,15 +8,6 @@
         <p class="text-muted">Drag & drop candidates through the hiring pipeline</p>
       </div>
 
-      <!-- GOOGLE CONNECT BUTTON (ADD THIS) -->
-      <div class="text-center mb-3">
-        <button class="btn btn-danger px-4 py-2 rounded-pill shadow-sm"
-                @click="connectGoogle">
-          <i class="bi bi-google me-2"></i> Connect Google Calendar
-        </button>
-      </div>
-
-
       <div class="d-flex justify-content-center mb-3">
         <select v-model="selectedJobId" @change="onJobChange" class="form-select w-75 w-md-50 rounded-pill px-3 py-2 shadow-sm">
           <option value="">Select Job Title</option>
@@ -100,8 +91,9 @@
 <script setup>
 import { ref, reactive, onMounted, nextTick } from 'vue';
 import draggable from 'vuedraggable';
-import Topbar from "../components/RecruiterNavbar.vue"; // optional: keep if you have it
-import SchedulingModal from './SchedulingModal.vue'; // adjust path as needed
+import Swal from 'sweetalert2'; 
+import Topbar from "../components/RecruiterNavbar.vue"; 
+import SchedulingModal from './SchedulingModal.vue'; 
 
 const API_URL = "http://127.0.0.1:5000/api";
 const token = localStorage.getItem("token") || "";
@@ -110,6 +102,7 @@ const token = localStorage.getItem("token") || "";
 const jobs = ref([]);
 const selectedJobId = ref("");
 const searchQuery = ref("");
+const isConnected = ref(false); 
 
 /* Pagination */
 const page = ref(1);
@@ -269,6 +262,18 @@ async function onDragEnd(evt) {
     // FIX: If target is Interview Scheduled -> prepare modal state
     if (destStatus === "INTERVIEW_SCHEDULED") {
       
+      // Check if Google is connected before proceeding to schedule
+      if (!isConnected.value) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Connection Required',
+          text: 'Please connect your Google Calendar to schedule interviews.',
+          confirmButtonText: 'OK',
+        });
+        loadCandidates();
+        return;
+      }
+      
       // 1. Set data to MOUNT the modal component
       modalCjrId.value = movedId;
       modalCandidateName.value = movedName || "";
@@ -297,7 +302,12 @@ async function onDragEnd(evt) {
 
     const data = await res.json().catch(()=>({}));
     if (!res.ok || !data.success) {
-      alert("Failed to update status: " + (data.message || data.error || "unknown"));
+      Swal.fire({
+          icon: 'error',
+          title: 'Status Update Failed',
+          text: data.message || data.error || "An unknown error occurred while updating the candidate status.",
+          confirmButtonText: 'OK',
+      });
     }
 
     // reload canonical
@@ -341,39 +351,103 @@ async function connectGoogle() {
     const data = await res.json();
 
     if (!data.success) {
-      alert("Failed to get Google OAuth URL");
+      Swal.fire({
+          icon: 'error',
+          title: 'Configuration Error',
+          text: 'Failed to retrieve Google OAuth URL. Check backend configuration.',
+          confirmButtonText: 'OK',
+      });
       return;
     }
+    
+    // Show a static alert indicating the user should complete the popup
+    const swalInstance = Swal.fire({
+      title: 'Google Authorization Required',
+      icon: 'info',
+      html: `
+        <p class="text-muted mb-3">Please grant permission in the new window that just opened.</p>
+        <p class="text-warning small">If you don't see a window, check your browser's popup blocker.</p>
+      `,
+      showConfirmButton: false, // Hide the initial button
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      didOpen: () => {
+        // Step 2 — Open Google Auth popup
+        const popup = window.open(data.url, "_blank", "width=500,height=600");
+        
+        // Step 3 — Listen for authorization code
+        const messageListener = async (event) => {
+          // Security check: ensure event origin is expected
+          if (event.origin !== "http://127.0.0.1:5000" && event.origin !== "http://localhost:5000") {
+              return;
+          }
+          
+          const code = event.data?.code;
+          if (!code) return;
+          
+          // Remove listener immediately after receiving the code
+          window.removeEventListener("message", messageListener);
+          
+          // Update Swal to show loading state while processing the code
+          Swal.update({
+              title: 'Processing Connection...',
+              html: 'Please wait while we secure your authorization tokens.',
+              icon: 'info',
+              showCancelButton: false,
+              showConfirmButton: false,
+          });
+          Swal.showLoading();
 
-    // Step 2 — Open Google Auth popup
-    const popup = window.open(data.url, "_blank", "width=500,height=600");
+          // Step 4 — Send code to backend
+          const res2 = await fetch(`${API_URL}/google-exchange-code`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({ code })
+          });
 
-    // Step 3 — Listen for authorization code
-    window.addEventListener("message", async (event) => {
-      const code = event.data?.code;
-      if (!code) return;
-
-      // Step 4 — Send code to backend
-      const res2 = await fetch(`${API_URL}/google-exchange-code`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ code })
-      });
-
-      const resp = await res2.json();
-      if (resp.success) {
-        alert("Google connected successfully!");
-      } else {
-        alert("Failed to connect Google: " + resp.message);
+          const resp = await res2.json();
+          
+          // Step 5: Handle success or failure
+          if (resp.success) {
+            isConnected.value = true; // Update state
+            
+            // Success: Update Swal message and CLOSE it
+            Swal.fire({
+                icon: 'success',
+                title: 'Connection Successful!',
+                text: 'Google Calendar is now connected for scheduling.',
+                timer: 3000,
+                showConfirmButton: false
+            });
+            
+          } else {
+            // Failure: Update Swal message and let the user click OK to retry/close
+            Swal.hideLoading();
+            Swal.update({
+                icon: 'error',
+                title: 'Connection Failed',
+                html: resp.message || "An unexpected error occurred during token exchange. You may retry.",
+                showConfirmButton: true,
+                confirmButtonText: 'OK / Retry',
+            });
+          }
+        };
+        
+        window.addEventListener("message", messageListener);
       }
     });
 
   } catch (err) {
     console.error(err);
-    alert("Google connection error");
+    Swal.fire({
+        icon: 'error',
+        title: 'Connection Error',
+        text: 'An unexpected error occurred while initiating the Google connection flow.',
+        confirmButtonText: 'OK',
+    });
   }
 }
 
@@ -397,29 +471,36 @@ async function checkGoogleConnection() {
 onMounted(async () => {
   loadRecruiterJobs();
 
-  const isConnected = await checkGoogleConnection();
+  const isConnectedNow = await checkGoogleConnection();
+  isConnected.value = isConnectedNow; // Set reactive state
 
-  if (!isConnected) {
+  if (!isConnectedNow) {
+    // Display SweetAlert prompt if not connected
     Swal.fire({
       title: "Google Calendar Not Connected",
+      icon: "info",
       html: `
-        <p class="mb-2">To schedule interviews with Google Meet, please connect your Google Calendar.</p>
-        <button id="connectBtn" class="btn btn-danger px-4 py-2 rounded-pill">
-          <i class="bi bi-google me-2"></i> Connect Google Calendar
+        <p class="text-muted mb-4">You need to connect your Google account to automatically schedule interviews and create Google Meet links.</p>
+        <button id="connectBtn" class="btn btn-danger px-4 py-2 shadow-sm">
+          <i class="bi bi-google me-2"></i> Connect with Google
         </button>
       `,
       showConfirmButton: false,
       allowOutsideClick: false,
+      allowEscapeKey: false,
+      customClass: {
+        confirmButton: 'btn btn-primary' // Custom class for buttons if shown
+      },
       didOpen: () => {
-        document.getElementById("connectBtn").onclick = () => {
-          connectGoogle();
+        // Attach listener to the button inside the SweetAlert
+        document.getElementById("connectBtn").onclick = async () => {
+          // Instead of closing, call connectGoogle which handles the loading state update
+          await connectGoogle();
         };
       }
     });
   }
 });
-
-
 
 </script>
 
@@ -432,5 +513,12 @@ onMounted(async () => {
 .card-header { border-top-left-radius: 16px !important; border-top-right-radius: 16px !important; font-size: 1rem; letter-spacing: 0.5px; }
 .candidate-card { transition: all 0.2s ease-in-out; cursor: grab; }
 .candidate-card:hover { background-color: #f8faff; transform: scale(1.02); border-color: #b3d4fc; }
+/* Ensure the custom button styles look good */
+.btn-primary { background-color: #4285F4; border-color: #4285F4; }
+.btn-primary:hover { background-color: #357ae8; border-color: #357ae8; }
+.btn-danger { background-color: #EA4335; border-color: #EA4335; } /* Google Red style */
+.btn-danger:hover { background-color: #d13a2d; border-color: #d13a2d; }
+
+
 @media (max-width: 768px) { .card-body { max-height: none; } .card { margin-bottom: 1rem; } }
 </style>
