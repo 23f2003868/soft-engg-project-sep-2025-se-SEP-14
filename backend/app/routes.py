@@ -831,9 +831,10 @@ def get_jobs(current_user):
         return jsonify({"error": f"Failed to fetch jobs: {str(e)}"}), 500
 
 
+# In app/routes.py
+
 @main.route('/api/jobs-all', methods=['GET'])
-@token_required
-def get_all_jobs(current_user):
+def get_all_jobs():
     try:
         jobs_data = Job.query.filter_by(status="ACTV").all()
 

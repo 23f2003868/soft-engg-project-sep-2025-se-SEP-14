@@ -20,19 +20,21 @@ This is a job portal application that supports full user flows for Candidates, R
 The project uses **Vue Router** for client-side navigation.  
 Below is a complete list of routes and their corresponding components.
 
-| **Path** | **Route Name** | **Component** | **Description** |
-|-----------|----------------|----------------|------------------|
-| `/` | `home` | `HomeView.vue` | Landing page of the application |
-| `/login` | `login` | `LogIn.vue` | Login page for existing users |
-| `/signup` | `signup` | `SignUp.vue` | Registration page for new users |
-| `/about` | `about` | `About.vue` | Information about the platform |
-| `/contact` | `contact` | `Contact.vue` | Contact page for help and support |
-| `/jobs` | `job` | `JobListing.vue` | Displays all job listings |
-| `/recruiter` | `recruiter-dashboard` | `RecruiterDashboard.vue` | Main dashboard for recruiters |
-| `/recruiter/profile` | `recruiter-profile` | `RecruiterProfile.vue` | Manage recruiter profile information |
-| `/recruiter/tracker` | `SmartCandidateTracker` | `SmartCandidateTracker.vue` | Smart tracking system |
-| `/candidate` | `candidate-dashboard` | `CandidateDashboard.vue` | Dashboard for candidates |
-| `/candidate/profile` | `candidate-profile` | `CandidateProfile.vue` | Candidate profile management page |
+| **Path**             | **Component**               | **Description**                                    |
+| -------------------- | --------------------------- | -------------------------------------------------- |
+| `/`                  | `HomeView.vue`              | Landing page                                       |
+| `/login`             | `LogIn.vue`                 | Login page                                         |
+| `/signup`            | `SignUp.vue`                | Register new user                                  |
+| `/about`             | `About.vue`                 | About the platform                                 |
+| `/contact`           | `Contact.vue`               | Contact & support                                  |
+| `/jobs`              | `JobListing.vue`            | All job listings                                   |
+| `/recruiter`         | `RecruiterDashboard.vue`    | Main recruiter dashboard                           |
+| `/recruiter/profile` | `RecruiterProfile.vue`      | Update recruiter details                           |
+| `/recruiter/tracker` | `SmartCandidateTracker.vue` | Applicant tracking system (ATS) & Kanban view      |
+| `/candidate`         | `CandidateDashboard.vue`    | Candidate dashboard                                |
+| `/candidate/profile` | `CandidateProfile.vue`      | Update candidate details                           |
+| `/candidate/saved`   | `SavedJobs.vue`             | Saved Job by candidate                             |
+| `/candidate/applied` | `AppliedJobs.vue`           | Candidate track status for submitted applications  |
 
 ---
 
@@ -50,24 +52,32 @@ frontend/
 │           ├── Praul.jpg
 │           ├── Shyaam.jpg
 │           ├── Suvrat.jpg
-│           └── Tripurari.jpg
+│           ├── Tripurari.jpg
+│           └── young-businesswomen-working-with-digital-tablet-her-office.jpg
 │
 ├── src/
 │   ├── assets/
 │   ├── components/
 │   │   ├── CandidateNavbar.vue
+│   │   ├── ApplicantsModal.vue
 │   │   ├── ChatBot.vue
 │   │   ├── Footer.vue
 │   │   ├── JobManagement.vue
+│   │   ├── JobCard.vue
+│   │   ├── JobDetailsModal.vue
 │   │   ├── Navbar.vue
-│   │   ├── RecruiterNavbar.vue
-│   │   └── RecruiterStatsCard.vue
+│   │   └── RecruiterNavbar.vue
 │   │
 │   ├── router/
 │   │   └── index.js
 │   │
+│   ├── services/
+|   |   ├── api.js
+│   │   └── auth.js
+│   │
 │   ├── views/
 │   │   ├── About.vue
+│   │   ├── AppliedJobs.vue
 │   │   ├── CandidateDashboard.vue
 │   │   ├── CandidateProfile.vue
 │   │   ├── Contact.vue
@@ -76,6 +86,8 @@ frontend/
 │   │   ├── LogIn.vue
 │   │   ├── RecruiterDashboard.vue
 │   │   ├── RecruiterProfile.vue
+│   │   ├── SavedJobs.vue
+│   │   ├── SchedulingModal.vue
 │   │   ├── SignUp.vue
 │   │   └── SmartCandidateTracker.vue
 │   │
@@ -100,7 +112,7 @@ The application is structured for scalability:
 * **`src/views/`**: Contains full-page components (e.g., LogIn, Dashboard).
 * **`src/components/`**: Contains small, reusable UI elements (e.g., Button, Navbar).
 * **`src/router/`**: Defines all application routes (URLs).
-* **`src/assets/`**: Holds global styles, images, and fonts.
+* **`src/services/`**: Manages API calls and authentication logic.
 
 ---
 
