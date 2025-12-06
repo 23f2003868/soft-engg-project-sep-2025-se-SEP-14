@@ -26,7 +26,7 @@ from flask_login import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
-from app import db, redis_client
+from app import db, redis_client, cache
 from app.forms import (
     RegisterAdminForm, RegisterCandidateForm,
     RegisterRecruiterForm, CreateJobForm
@@ -834,6 +834,7 @@ def get_jobs(current_user):
 # In app/routes.py
 
 @main.route('/api/jobs-all', methods=['GET'])
+@cache.cached(timeout=300, key_prefix='jobs:list')
 def get_all_jobs():
     try:
         jobs_data = Job.query.filter_by(status="ACTV").all()
@@ -1094,6 +1095,8 @@ def create_job_api(current_user):
         db.session.add(new_job)
         db.session.commit()
 
+        cache.delete('jobs:list')
+
         return jsonify({
             "success": True,
             "message": "Job created successfully!",
@@ -1163,6 +1166,7 @@ def update_job_api(current_user, job_id):
         job.end_date = end_date
 
         db.session.commit()
+        cache.delete('jobs:list')
 
         return jsonify({"success": True, "message": "Job updated successfully"}), 200
 
@@ -1192,6 +1196,8 @@ def delete_job_api(current_user, job_id):
         # Delete job
         db.session.delete(job)
         db.session.commit()
+
+        cache.delete('jobs:list')
 
         return jsonify({"success": True, "message": "Job deleted successfully."}), 200
 
