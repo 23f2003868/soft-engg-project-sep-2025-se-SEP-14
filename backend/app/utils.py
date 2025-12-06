@@ -3,7 +3,18 @@ import json
 import os
 import re
 from langchain_google_genai import ChatGoogleGenerativeAI
+from uuid import uuid4
+from flask import g
 
+
+def create_candidate_applied_jobs_key_prefix():
+    user = getattr(g, "current_user", None)
+    if user is None:
+        return f"nocache:{uuid4()}"
+    return f"applied-jobs:user:{user.candidate.candidate_id}"
+
+def get_candidate_applied_job_key_prefix(candidate_id):
+    return f"applied-jobs:user:{candidate_id}"
 
 
 def parse_pdf(filepath):

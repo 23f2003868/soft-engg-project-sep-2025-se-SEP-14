@@ -39,6 +39,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, AIMessage
 from dotenv import load_dotenv
+
+from app.utils import create_candidate_applied_jobs_key_prefix, get_candidate_applied_job_key_prefix
 load_dotenv()
 
 # Google OAuth / Calendar config
@@ -1316,6 +1318,7 @@ def update_candidate_job_request(current_user, request_id):
 
     # Always update status_change_date
     candidate_request.status_change_date = datetime.datetime.utcnow()
+    cache.delete(get_candidate_applied_job_key_prefix(candidate_request.candidate_id))
 
     db.session.commit()
 
@@ -1715,7 +1718,7 @@ def submit_test(current_user, job_id):
             cjr.test_score = score
             cjr.status = "TEST_COMPLETED"
             cjr.status_change_date = datetime.datetime.utcnow()
-
+        
         db.session.commit()
     except Exception as e:
         db.session.rollback()
@@ -1739,6 +1742,7 @@ def submit_test(current_user, job_id):
             )
             db.session.add(new_cjr)
             db.session.commit()
+
     except Exception as e:
         db.session.rollback()
         # test saved but auto-apply failed: reply success but notify client
@@ -1749,6 +1753,7 @@ def submit_test(current_user, job_id):
             "status": "TEST_COMPLETED"
         }), 200
 
+    cache.delete(get_candidate_applied_job_key_prefix(current_user.candidate.candidate_id))
     # Success
     return jsonify({
         "success": True,
@@ -1817,6 +1822,7 @@ def resume_retry(current_user):
 @main.route('/api/job-apply', methods=['POST'])
 @token_required
 def apply_job(current_user):
+    
     data = request.get_json() or {}
     job_id = data.get("job_id")
 
@@ -1865,6 +1871,7 @@ def apply_job(current_user):
         cjr.status = "APPLIED"
         cjr.status_change_date = datetime.datetime.utcnow()
         db.session.commit()
+        cache.delete(get_candidate_applied_job_key_prefix(current_user.candidate.candidate_id))
 
         return jsonify({
             "success": True,
@@ -1881,9 +1888,9 @@ def apply_job(current_user):
 
 
 
-
 @main.route('/api/applied-jobs', methods=['GET'])
 @token_required
+@cache.cached(timeout=300, key_prefix=create_candidate_applied_jobs_key_prefix)
 def get_applied_jobs(current_user):
 
     if current_user.role != "CANDIDATE":
@@ -2455,6 +2462,8 @@ def schedule_interview(current_user, cjr_id):
         db.session.rollback()
         current_app.logger.error("DB save failed: %s", str(e))
         return jsonify({"success": False, "message": "Database error while saving interview", "error": str(e)}), 500
+
+    cache.delete(get_candidate_applied_job_key_prefix(cjr.candidate_id))
 
     # Success response
     return jsonify({
