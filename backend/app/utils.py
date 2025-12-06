@@ -7,24 +7,34 @@ from uuid import uuid4
 from flask import g
 
 
+def create_recruiter_created_jobs_key_prefix():
+    user = getattr(g, "current_user", None)
+    if user is None:
+        return f"nocache:{uuid4()}"
+    return f"created-jobs:recruiter:{user.user_id}"
+
+def get_recruiter_created_job_key_prefix(user_id):
+    return f"created-jobs:recruiter:{user_id}"
+
+
 def create_candidate_applied_jobs_key_prefix():
     user = getattr(g, "current_user", None)
     if user is None:
         return f"nocache:{uuid4()}"
-    return f"applied-jobs:user:{user.candidate.candidate_id}"
+    return f"applied-jobs:candidate:{user.candidate.candidate_id}"
 
 def get_candidate_applied_job_key_prefix(candidate_id):
-    return f"applied-jobs:user:{candidate_id}"
+    return f"applied-jobs:candidate:{candidate_id}"
 
 
 def create_candidate_saved_jobs_key_prefix():
     user = getattr(g, "current_user", None)
     if user is None:
         return f"nocache:{uuid4()}"
-    return f"saved-jobs:user:{user.candidate.candidate_id}"
+    return f"saved-jobs:candidate:{user.candidate.candidate_id}"
 
 def get_candidate_saved_job_key_prefix(candidate_id):
-    return f"saved-jobs:user:{candidate_id}"
+    return f"saved-jobs:candidate:{candidate_id}"
 
 
 def parse_pdf(filepath):

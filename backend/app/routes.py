@@ -40,7 +40,7 @@ from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, AIMessage
 from dotenv import load_dotenv
 
-from app.utils import create_candidate_applied_jobs_key_prefix, get_candidate_applied_job_key_prefix, get_candidate_saved_job_key_prefix, create_candidate_saved_jobs_key_prefix
+from app.utils import create_candidate_applied_jobs_key_prefix, get_candidate_applied_job_key_prefix, get_candidate_saved_job_key_prefix, create_candidate_saved_jobs_key_prefix, get_recruiter_created_job_key_prefix, create_recruiter_created_jobs_key_prefix
 
 load_dotenv()
 
@@ -805,6 +805,7 @@ def update_candidate(current_user):
 @main.route('/api/jobs', methods=['GET'])
 @token_required
 def get_jobs(current_user):
+    
     try:
         if current_user.role == "RECRUITER":
             jobs_data = Job.query.filter_by(created_by=current_user.user_id, status="ACTV").all()
@@ -1102,6 +1103,7 @@ def create_job_api(current_user):
         db.session.commit()
 
         cache.delete('jobs:list')
+        cache.delete(get_recruiter_created_job_key_prefix(current_user.user_id))
 
         return jsonify({
             "success": True,
@@ -1173,6 +1175,7 @@ def update_job_api(current_user, job_id):
 
         db.session.commit()
         cache.delete('jobs:list')
+        cache.delete(get_recruiter_created_job_key_prefix(current_user.user_id))
 
         return jsonify({"success": True, "message": "Job updated successfully"}), 200
 
@@ -1204,6 +1207,7 @@ def delete_job_api(current_user, job_id):
         db.session.commit()
 
         cache.delete('jobs:list')
+        cache.delete(get_recruiter_created_job_key_prefix(current_user.user_id))
 
         return jsonify({"success": True, "message": "Job deleted successfully."}), 200
 
@@ -1943,6 +1947,7 @@ from sqlalchemy import func
 
 @main.route('/api/recruiter/jobs', methods=['GET'])
 @token_required
+@cache.cached(timeout=300, key_prefix=create_recruiter_created_jobs_key_prefix)
 def recruiter_jobs(current_user):
     if current_user.role != "RECRUITER":
         return jsonify({"success": False, "message": "Forbidden"}), 403
