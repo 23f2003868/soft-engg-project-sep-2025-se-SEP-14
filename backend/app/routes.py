@@ -40,7 +40,8 @@ from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, AIMessage
 from dotenv import load_dotenv
 
-from app.utils import create_candidate_applied_jobs_key_prefix, get_candidate_applied_job_key_prefix
+from app.utils import create_candidate_applied_jobs_key_prefix, get_candidate_applied_job_key_prefix, get_candidate_saved_job_key_prefix, create_candidate_saved_jobs_key_prefix
+
 load_dotenv()
 
 # Google OAuth / Calendar config
@@ -891,7 +892,7 @@ def save_job(current_user):
     new_save = SavedJob(candidate_id=candidate.candidate_id, job_id=job_id)
     db.session.add(new_save)
     db.session.commit()
-
+    cache.delete(get_candidate_saved_job_key_prefix(candidate.candidate_id))
     return jsonify({"success": True, "message": "Job saved successfully"}), 201
 
 
@@ -911,12 +912,14 @@ def delete_saved_job(current_user, job_id):
 
     db.session.delete(saved)
     db.session.commit()
+    cache.delete(get_candidate_saved_job_key_prefix(candidate.candidate_id))
 
     return jsonify({"success": True, "message": "Removed from saved jobs"}), 200
 
 
 @main.route('/api/saved-jobs-details', methods=['GET'])
 @token_required
+@cache.cached(timeout=300, key_prefix=create_candidate_saved_jobs_key_prefix)
 def saved_jobs_details(current_user):
     try:
         # get candidate record
@@ -1753,7 +1756,7 @@ def submit_test(current_user, job_id):
             "status": "TEST_COMPLETED"
         }), 200
 
-    cache.delete(get_candidate_applied_job_key_prefix(current_user.candidate.candidate_id))
+    cache.delete(get_candidate_applied_job_key_prefix(candidate.candidate_id))
     # Success
     return jsonify({
         "success": True,
@@ -1871,7 +1874,7 @@ def apply_job(current_user):
         cjr.status = "APPLIED"
         cjr.status_change_date = datetime.datetime.utcnow()
         db.session.commit()
-        cache.delete(get_candidate_applied_job_key_prefix(current_user.candidate.candidate_id))
+        cache.delete(get_candidate_applied_job_key_prefix(candidate.candidate_id))
 
         return jsonify({
             "success": True,

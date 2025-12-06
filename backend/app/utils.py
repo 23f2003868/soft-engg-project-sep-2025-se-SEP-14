@@ -17,6 +17,16 @@ def get_candidate_applied_job_key_prefix(candidate_id):
     return f"applied-jobs:user:{candidate_id}"
 
 
+def create_candidate_saved_jobs_key_prefix():
+    user = getattr(g, "current_user", None)
+    if user is None:
+        return f"nocache:{uuid4()}"
+    return f"saved-jobs:user:{user.candidate.candidate_id}"
+
+def get_candidate_saved_job_key_prefix(candidate_id):
+    return f"saved-jobs:user:{candidate_id}"
+
+
 def parse_pdf(filepath):
     """
     Extract text from a PDF file using pdfplumber.
