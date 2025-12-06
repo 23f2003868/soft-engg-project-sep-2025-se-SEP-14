@@ -202,6 +202,19 @@ const jobs = ref([]);
 const isLoading = ref(true);
 const selectedJob = ref({}); // Holds job details for the modal
 
+const allSkills = ref([
+  "Python",
+  "SQL",
+  "VueJS",
+  "JavaScript",
+  "React",
+  "Node.js",
+  "Django",
+  "Flask",
+  "Machine Learning",
+  "Data Analysis"
+]);
+
 // Filters
 const searchQuery = ref("");
 const selectedCategory = ref("");
