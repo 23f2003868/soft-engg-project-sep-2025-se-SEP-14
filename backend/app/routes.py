@@ -17,7 +17,7 @@ UPLOAD_FOLDER = Config.UPLOAD_FOLDER
 
 from flask import (
     Blueprint, json as flask_json, jsonify, flash, request, redirect,
-    url_for, render_template, send_from_directory
+    url_for, render_template, send_from_directory, g
 )
 from flask_login import (
     login_user, current_user, logout_user,
@@ -95,6 +95,7 @@ def token_required(f):
             data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
             # Ensure we fetch fresh user from DB
             current_user_obj = User.query.get(data["user_id"])
+            g.current_user = current_user_obj
             if not current_user_obj:
                 return jsonify({"success": False, "message": "User not found"}), 404
         except Exception as e:
@@ -1877,6 +1878,7 @@ def apply_job(current_user):
             "message": "Failed to apply",
             "error": str(e)
         }), 500
+
 
 
 
