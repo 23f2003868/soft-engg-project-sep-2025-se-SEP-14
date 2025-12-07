@@ -502,7 +502,7 @@
             :key="msg.id"
             :class="msg.sender === 'user' ? 'msg msg-user' : 'msg msg-ai'"
           >
-            <div class="bubble" v-html="msg.text"></div>
+            <div class="bubble" v-html="marked.parse(msg.text)"></div>
           </div>
 
           <!-- Typing indicator -->
