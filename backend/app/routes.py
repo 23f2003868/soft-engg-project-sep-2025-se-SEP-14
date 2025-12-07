@@ -17,7 +17,7 @@ UPLOAD_FOLDER = Config.UPLOAD_FOLDER
 
 from flask import (
     Blueprint, json as flask_json, jsonify, flash, request, redirect,
-    url_for, render_template, send_from_directory
+    url_for, render_template, send_from_directory, g
 )
 from flask_login import (
     login_user, current_user, logout_user,
@@ -26,7 +26,7 @@ from flask_login import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
-from app import db, redis_client
+from app import db, redis_client, cache
 from app.forms import (
     RegisterAdminForm, RegisterCandidateForm,
     RegisterRecruiterForm, CreateJobForm
@@ -39,6 +39,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage, AIMessage
 from dotenv import load_dotenv
+
+from app.utils import create_candidate_applied_jobs_key_prefix, get_candidate_applied_job_key_prefix, get_candidate_saved_job_key_prefix, create_candidate_saved_jobs_key_prefix, get_recruiter_created_job_key_prefix, create_recruiter_created_jobs_key_prefix
+
 load_dotenv()
 
 # Google OAuth / Calendar config
@@ -95,6 +98,7 @@ def token_required(f):
             data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
             # Ensure we fetch fresh user from DB
             current_user_obj = User.query.get(data["user_id"])
+            g.current_user = current_user_obj
             if not current_user_obj:
                 return jsonify({"success": False, "message": "User not found"}), 404
         except Exception as e:
@@ -801,6 +805,7 @@ def update_candidate(current_user):
 @main.route('/api/jobs', methods=['GET'])
 @token_required
 def get_jobs(current_user):
+    
     try:
         if current_user.role == "RECRUITER":
             jobs_data = Job.query.filter_by(created_by=current_user.user_id, status="ACTV").all()
@@ -834,6 +839,7 @@ def get_jobs(current_user):
 # In app/routes.py
 
 @main.route('/api/jobs-all', methods=['GET'])
+@cache.cached(timeout=300, key_prefix='jobs:list')
 def get_all_jobs():
     try:
         jobs_data = Job.query.filter_by(status="ACTV").all()
@@ -887,7 +893,7 @@ def save_job(current_user):
     new_save = SavedJob(candidate_id=candidate.candidate_id, job_id=job_id)
     db.session.add(new_save)
     db.session.commit()
-
+    cache.delete(get_candidate_saved_job_key_prefix(candidate.candidate_id))
     return jsonify({"success": True, "message": "Job saved successfully"}), 201
 
 
@@ -907,12 +913,14 @@ def delete_saved_job(current_user, job_id):
 
     db.session.delete(saved)
     db.session.commit()
+    cache.delete(get_candidate_saved_job_key_prefix(candidate.candidate_id))
 
     return jsonify({"success": True, "message": "Removed from saved jobs"}), 200
 
 
 @main.route('/api/saved-jobs-details', methods=['GET'])
 @token_required
+@cache.cached(timeout=300, key_prefix=create_candidate_saved_jobs_key_prefix)
 def saved_jobs_details(current_user):
     try:
         # get candidate record
@@ -1094,6 +1102,9 @@ def create_job_api(current_user):
         db.session.add(new_job)
         db.session.commit()
 
+        cache.delete('jobs:list')
+        cache.delete(get_recruiter_created_job_key_prefix(current_user.user_id))
+
         return jsonify({
             "success": True,
             "message": "Job created successfully!",
@@ -1163,6 +1174,8 @@ def update_job_api(current_user, job_id):
         job.end_date = end_date
 
         db.session.commit()
+        cache.delete('jobs:list')
+        cache.delete(get_recruiter_created_job_key_prefix(current_user.user_id))
 
         return jsonify({"success": True, "message": "Job updated successfully"}), 200
 
@@ -1192,6 +1205,9 @@ def delete_job_api(current_user, job_id):
         # Delete job
         db.session.delete(job)
         db.session.commit()
+
+        cache.delete('jobs:list')
+        cache.delete(get_recruiter_created_job_key_prefix(current_user.user_id))
 
         return jsonify({"success": True, "message": "Job deleted successfully."}), 200
 
@@ -1309,6 +1325,7 @@ def update_candidate_job_request(current_user, request_id):
 
     # Always update status_change_date
     candidate_request.status_change_date = datetime.datetime.utcnow()
+    cache.delete(get_candidate_applied_job_key_prefix(candidate_request.candidate_id))
 
     db.session.commit()
 
@@ -1708,7 +1725,7 @@ def submit_test(current_user, job_id):
             cjr.test_score = score
             cjr.status = "TEST_COMPLETED"
             cjr.status_change_date = datetime.datetime.utcnow()
-
+        
         db.session.commit()
     except Exception as e:
         db.session.rollback()
@@ -1732,6 +1749,7 @@ def submit_test(current_user, job_id):
             )
             db.session.add(new_cjr)
             db.session.commit()
+
     except Exception as e:
         db.session.rollback()
         # test saved but auto-apply failed: reply success but notify client
@@ -1742,6 +1760,7 @@ def submit_test(current_user, job_id):
             "status": "TEST_COMPLETED"
         }), 200
 
+    cache.delete(get_candidate_applied_job_key_prefix(candidate.candidate_id))
     # Success
     return jsonify({
         "success": True,
@@ -1810,6 +1829,7 @@ def resume_retry(current_user):
 @main.route('/api/job-apply', methods=['POST'])
 @token_required
 def apply_job(current_user):
+    
     data = request.get_json() or {}
     job_id = data.get("job_id")
 
@@ -1858,6 +1878,7 @@ def apply_job(current_user):
         cjr.status = "APPLIED"
         cjr.status_change_date = datetime.datetime.utcnow()
         db.session.commit()
+        cache.delete(get_candidate_applied_job_key_prefix(candidate.candidate_id))
 
         return jsonify({
             "success": True,
@@ -1876,6 +1897,7 @@ def apply_job(current_user):
 
 @main.route('/api/applied-jobs', methods=['GET'])
 @token_required
+@cache.cached(timeout=300, key_prefix=create_candidate_applied_jobs_key_prefix)
 def get_applied_jobs(current_user):
 
     if current_user.role != "CANDIDATE":
@@ -1925,6 +1947,7 @@ from sqlalchemy import func
 
 @main.route('/api/recruiter/jobs', methods=['GET'])
 @token_required
+@cache.cached(timeout=300, key_prefix=create_recruiter_created_jobs_key_prefix)
 def recruiter_jobs(current_user):
     if current_user.role != "RECRUITER":
         return jsonify({"success": False, "message": "Forbidden"}), 403
@@ -2447,6 +2470,8 @@ def schedule_interview(current_user, cjr_id):
         db.session.rollback()
         current_app.logger.error("DB save failed: %s", str(e))
         return jsonify({"success": False, "message": "Database error while saving interview", "error": str(e)}), 500
+
+    cache.delete(get_candidate_applied_job_key_prefix(cjr.candidate_id))
 
     # Success response
     return jsonify({
