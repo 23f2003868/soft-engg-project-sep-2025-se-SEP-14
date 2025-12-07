@@ -502,7 +502,8 @@
             :key="msg.id"
             :class="msg.sender === 'user' ? 'msg msg-user' : 'msg msg-ai'"
           >
-            <div class="bubble" v-html="msg.text"></div>
+            <div v-if="msg.sender==='ai'" class="bubble" v-html="marked.parse(msg.text)"></div>
+            <div v-else class="bubble" >{{ msg.text }}</div>
           </div>
 
           <!-- Typing indicator -->
@@ -1314,7 +1315,11 @@ function scrollChat() {
 
 async function openChatForJob(job) {
   chatbotJob.value = job;
-  chatMessages.value = [];
+  chatMessages.value = [{
+    id: Date.now(),
+    sender: "ai",
+    text: `Hello! 👋<br/>Ask me anything about <b>${job.job_title}</b> at <b>${job.company}</b>.`
+  }];
   botTyping.value = false;
 
   chatbotModalInstance.show();
@@ -1330,11 +1335,13 @@ async function openChatForJob(job) {
     const data = await res.json();
 
     if (data.success && Array.isArray(data.history) && data.history.length) {
-      chatMessages.value = data.history.map((m, idx) => ({
-        id: idx,
-        sender: m.role === "user" ? "user" : "ai",
-        text: m.content
-      }));
+      chatMessages.value.push(...data.history.map((m, idx) => ({
+            id: idx,
+            sender: m.role === "user" ? "user" : "ai",
+            text: m.content
+          })
+        )
+      )
     } else {
       // First message
       chatMessages.value = [{
