@@ -1,7 +1,60 @@
-# Job Portal Application (ApplAI)  — Full Stack
+# 🚀 ApplAI: AI-Driven Talent Acquisition Suite
 
-This is a job portal application that supports complete user flows for Candidates, Recruiters, and Hiring Managers. The system includes a Vue-based frontend and a Flask-based backend, both working together as a complete full-stack solution.
+![Vue.js](https://img.shields.io/badge/Vue.js-35495E?style=for-the-badge&logo=vuedotjs&logoColor=4FC08D)
+![Flask](https://img.shields.io/badge/Flask-000000?style=for-the-badge&logo=flask&logoColor=white)
+![Google Gemini](https://img.shields.io/badge/Google%20Gemini-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white)
+![Redis](https://img.shields.io/badge/redis-%23DD0031.svg?style=for-the-badge&logo=redis&logoColor=white)
+![Celery](https://img.shields.io/badge/celery-%2337814A.svg?style=for-the-badge&logo=celery&logoColor=white)
+![SQLite](https://img.shields.io/badge/sqlite-%2307405e.svg?style=for-the-badge&logo=sqlite&logoColor=white)
+![JWT](https://img.shields.io/badge/JWT-black?style=for-the-badge&logo=JSON%20web%20tokens)
+![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=for-the-badge&logo=vite&logoColor=white)
 
+**ApplAI** is a sophisticated, full-stack Human Capital Management (HCM) platform designed to bridge the gap between top-tier talent and recruiters. By leveraging **Generative AI (Google Gemini)** and **Automated Workflow Orchestration**, ApplAI transforms the traditional job portal into an intelligent ecosystem that automates candidate screening, resume intelligence, and interview logistics.
+
+---
+
+## 🎥 Project Demonstration
+Check out our full walkthrough video here: [Watch Demo](https://drive.google.com/file/d/13TY59gW8XWaxJnZb3Iu835TOFypOl2nC/view?usp=sharing)
+
+---
+
+## 🌟 Key Professional Features
+### 1. 🤖 AI-Powered Intelligence
+* **NLP-Driven Resume Parsing:** Leverages **Gemini AI** to automatically extract skills and experience from PDFs, converting unstructured resumes into structured candidate profiles.
+* **AI Job Architect:** Instantly generates SEO-optimized, professional job descriptions using context-aware LLM prompts.
+* **Intelligent Career Concierge:** A RAG-based chatbot that provides candidates with instant, job-specific context and support.
+
+### 2.⚡ Automated Recruitment Pipeline
+* **Dynamic Skill Validation:** Every application requires a dynamically generated **10-question MCQ test** created by AI based on the job requirements to filter for top-tier talent.
+* **Visual ATS (Kanban):** A high-velocity command center allowing recruiters to manage the candidate lifecycle via drag-and-drop state management.
+
+### 3. 📅 Enterprise-Grade Integrations
+* **Native Google Workspace Integration:** Seamless **Google Calendar API** sync for real-time recruiter availability.
+* **One-Click Virtual Meetings:** Automated **Google Meet** link generation and automated calendar invites for synchronized scheduling.
+
+### 4. 🛡️ Robust System Architecture
+* **Asynchronous Task Queuing:** Powered by **Celery & Redis** to handle heavy compute tasks (parsing/scheduling) without blocking the user experience.
+* **Secure Session Management:** Industry-standard **JWT (JSON Web Tokens)** with encrypted storage protocols.
+
+---
+
+## 🧠 Technical Challenges & Solutions
+
+* **Challenge 1: Asynchronous Processing of Heavy PDF Blobs**
+    * *Problem:* Processing complex PDF resumes in real-time caused Gunicorn/Flask timeouts and UI freezing.
+    * *Solution:* Architected a **Distributed Task Queue** using **Celery & Redis**. This offloaded the heavy NLP compute to background workers, allowing the frontend to poll for status without blocking the candidate’s UX.
+
+* **Challenge 2: Multi-Step OAuth 2.0 State Management**
+    * *Problem:* Handling the Google Calendar OAuth handshake between a decoupled Vue frontend and Flask backend while maintaining security.
+    * *Solution:* Implemented a **Secure State Parameter** exchange. The backend generates a signed URL; upon callback, the server exchanges the authorization code for a Refresh Token, which is then encrypted and stored in the user profile for seamless future scheduling.
+
+* **Challenge 3: Prompt Engineering & Deterministic AI Outputs**
+    * *Problem:* AI "hallucinations" or non-standard formatting in MCQ generation caused frontend parsing errors.
+    * *Solution:* Implemented **System Instruction Guardrails** and **Pydantic-style JSON enforcement**. This ensures the LLM strictly adheres to a specific JSON schema, guaranteeing that every generated test is perfectly renderable by the Vue components.
+
+* **Challenge 4: Race Conditions in Kanban State Transitions**
+    * *Problem:* Rapid drag-and-drop actions on the Smart Tracker could lead to database desync.
+    * *Solution:* Developed an **Optimistic UI Update** strategy in Vuex combined with **Transactional Database Writes** in SQLAlchemy to ensure data integrity even under high-frequency interaction.
 ---
 
 ## 🛠️ Tech Stack
@@ -413,3 +466,36 @@ Server runs at:
 http://localhost:5173/  (Frontend)
 http://127.0.0.1:5000   (Backend)
 ```
+
+---
+
+## 🖼️ Application Screenshots
+
+### 1. Home Page
+![Home Page](https://drive.google.com/uc?export=view&id=1NvvVaCS-Qz4du4ICT1rxw0HUb48NwUrH)
+![Home Page](https://drive.google.com/uc?export=view&id=1hArW3i3-CX2t0ZQ67ubPwTgFtJYmSiz9)
+![Home Page](https://drive.google.com/uc?export=view&id=1qEvhGZdAAC-GMklPNHj92vS4022Uk7fv)
+![Home Page](https://drive.google.com/uc?export=view&id=1ZhQFyH15RGFnDUHtV0Vs5wPrbluisn2l)
+
+### 2. Login and Register
+![Home Page](https://drive.google.com/uc?export=view&id=1fCP_5CD75adrCbDbJzw6P4BW2XCkM-db)
+![Home Page](https://drive.google.com/uc?export=view&id=1jBodNt6-LESqltaNmSbZuvRhvhJ_NUGD)
+
+### 3. Candidate View
+![Home Page](https://drive.google.com/uc?export=view&id=1tfhFPlha_PFfI-G3yBf2JZt-sSQXKjEx)
+![Home Page](https://drive.google.com/uc?export=view&id=1BbRW-V4fwMVpd4X1mRxKelZaKiOsqQp5)
+![Home Page](https://drive.google.com/uc?export=view&id=1c3nev2VqzJKRSqxVoKzlLoGvNHsPCV5E)
+![Home Page](https://drive.google.com/uc?export=view&id=1BUqIbtuTWdBRLx9voYJAmjVMk1idFpII)
+![Home Page](https://drive.google.com/uc?export=view&id=11EngqsTaYHOZdRCmncU-KpPcCY2C-tCa)
+![Home Page](https://drive.google.com/uc?export=view&id=1TVcZEU2-xkwy8zFFVUTBHjvt_l6iXxf1)
+![Home Page](https://drive.google.com/uc?export=view&id=1em_Fs_HMiYhB-tIgw8moayaA9cGjj7LK)
+
+### 4. Recuiter View
+![Home Page](https://drive.google.com/uc?export=view&id=1VvZbI2K0NOGTDvNoeU7t3ALTHy5iL6KX)
+![Home Page](https://drive.google.com/uc?export=view&id=1-jO5kUX1cAAVwoulkVyvTDDmJBvzcgzS)
+![Home Page](https://drive.google.com/uc?export=view&id=15d1I3onypcFH70tqkWGYCpxs26H6v4hL)
+![Home Page](https://drive.google.com/uc?export=view&id=1clrnQ4C5VV_LStcHwsyC-Fj2FIhjCqF0)
+![Home Page](https://drive.google.com/uc?export=view&id=1gycQwphGuSEsDQRLEXMcnvEvj4Y3nyP4)
+![Home Page](https://drive.google.com/uc?export=view&id=1rchkhtj93xzds8xk7iMjbsGyI4Sz_WNa)
+![Home Page](https://drive.google.com/uc?export=view&id=1Hi_XexmF8ZKPF52RdGK2kIm_c10Otxn_)
+![Home Page](https://drive.google.com/uc?export=view&id=172FzzXW1goBvpzMY8FAF3Pfr3xZUTp4q)
